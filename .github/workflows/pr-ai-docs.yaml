@@ -2,7 +2,7 @@ name: PR AI Docs
 #test
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [ opened, synchronize, reopened, ready_for_review ]
 
 permissions:
   contents: write
@@ -127,7 +127,7 @@ jobs:
           CHANGES_JSON: ${{ steps.changes.outputs.changes_json }}
           CATEGORIZED_JSON: ${{ steps.changes.outputs.categorized_json }}
           STATS_JSON: ${{ steps.changes.outputs.stats }}
-          AI_MODEL: gpt-4.1-mini
+          AI_MODEL: gpt-4o
           AI_ENDPOINT: https://models.inference.ai.azure.com/chat/completions
         with:
           script: |
@@ -197,7 +197,7 @@ jobs:
               sections.push("## Testing");
 
               if (stats.testFiles > 0) {
-                sections.push(`- Automated test files are included in this PR.`);
+                sections.push("- Automated test files are included in this PR.");
                 sections.push("- Run the existing test suite before merging.");
               } else {
                 sections.push("- No automated test files were detected in this diff.");
@@ -322,78 +322,323 @@ jobs:
             ---`;
             }).join("\n\n");
 
-            const prompt = `You are a senior software engineer expert at analyzing GitHub Pull Requests and writing developer-friendly technical documentation.
+            const prompt = `
+            You are a Principal Software Engineer, Technical Lead and Software Documentation Specialist.
 
-            Return ONLY valid JSON with exactly these keys:
+            Your responsibility is to analyze the REAL Pull Request diff and generate documentation that is genuinely useful for:
+
+            - Developers
+            - Code Reviewers
+            - Technical Leads
+            - Product Owners
+            - Project Managers
+
+            Return ONLY valid JSON:
+
             {
-              "pr_description": "markdown content",
-              "changelog": "markdown content"
+              "pr_description": "markdown",
+              "changelog": "markdown"
             }
 
-            === PR CONTEXT ===
-            Title: ${context.payload.pull_request.title}
-            Body: ${context.payload.pull_request.body || "(no description)"}
+            ==================================================
+            PR CONTEXT
+            ==================================================
 
-            Stats:
-            - Total Files: ${stats.fileCount}
-            - Total Additions: ${stats.additions}
-            - Total Deletions: ${stats.deletions}
-            - Frontend Files: ${stats.frontendFiles}
-            - Backend Files: ${stats.backendFiles}
-            - Config Files: ${stats.configFiles}
-            - Test Files: ${stats.testFiles}
+            Title:
+            ${context.payload.pull_request.title}
 
-            === ACTUAL DIFF CONTENT TO ANALYZE ===
+            Description:
+            ${context.payload.pull_request.body || "(no description)"}
+
+            ==================================================
+            CHANGE STATISTICS
+            ==================================================
+
+            Files Changed: ${stats.fileCount}
+            Additions: ${stats.additions}
+            Deletions: ${stats.deletions}
+            Frontend Files: ${stats.frontendFiles}
+            Backend Files: ${stats.backendFiles}
+            Config Files: ${stats.configFiles}
+            Test Files: ${stats.testFiles}
+
+            ==================================================
+            ACTUAL DIFF CONTENT
+            ==================================================
+
             ${diffContent}
 
-            === PR DESCRIPTION FORMAT ===
+            ==================================================
+            PR DESCRIPTION REQUIREMENTS
+            ==================================================
+
+            Write the PR description in clear, natural, professional language.
+
+            The description must be easy to understand by both technical and non-technical stakeholders.
+
+            Avoid generic AI wording.
+
+            Avoid vague statements.
+
+            Base every statement on the actual diff whenever possible.
+
+            Use the following structure exactly:
+
             ## Summary
-            Write 2-4 clear sentences explaining the purpose of this PR.
+
+            Provide a concise overview explaining:
+
+            - what was implemented;
+            - what problem was solved;
+            - the overall objective;
+            - the expected impact on the application.
+
+            Write complete sentences in natural language.
+
+            ==================================================
 
             ## What Changed
-            Group changes by area. Explain what changed and why it matters.
+
+            Describe the implementation step by step.
+
+            For every major change explain:
+
+            - what was modified;
+            - what was added;
+            - what was removed;
+            - what was refactored.
+
+            Group related changes together.
+
+            Whenever visible in the diff, mention:
+
+            - files;
+            - classes;
+            - components;
+            - functions;
+            - services;
+            - modules;
+            - APIs.
+
+            Do not simply list files.
+
+            Explain the actual implementation.
+
+            ==================================================
+
+            ## Why It Changed
+
+            Explain the motivation behind the change.
+
+            Use:
+
+            - PR title;
+            - PR description;
+            - code modifications.
+
+            If the business reason cannot be determined from the available information, write:
+
+            "The business reason is not visible in the PR and should be confirmed from the related ticket or requirement."
+
+            ==================================================
+
+            ## Affected Areas
+
+            List only areas actually impacted by the changes.
+
+            Examples:
+
+            - User Interface
+            - Business Logic
+            - State Management
+            - API Integration
+            - Routing
+            - Configuration
+            - Data Models
+            - Database
+            - CI/CD
+            - Testing
+
+            For each affected area briefly explain the impact.
+
+            ==================================================
 
             ## Technical Details
-            Mention specific functions, components, files, APIs, refactoring, dependencies, or configuration changes.
+
+            Provide implementation-focused details for developers.
+
+            Include only information visible in the diff.
+
+            Mention:
+
+            - classes;
+            - functions;
+            - components;
+            - APIs;
+            - services;
+            - dependencies;
+            - configuration changes;
+            - architectural decisions;
+            - refactoring activities.
+
+            Explain how the implementation works when possible.
+
+            ==================================================
 
             ## Testing
-            Mention automated tests if present. Suggest specific manual test scenarios.
+
+            Generate realistic testing guidance.
+
+            ### Automated Testing
+
+            Mention:
+
+            - added tests;
+            - updated tests;
+            - missing tests when applicable.
+
+            ### Manual Testing
+
+            Provide practical scenarios that should be validated.
+
+            Focus on the exact functionality changed by the PR.
+
+            ### Regression Testing
+
+            Identify surrounding areas that should be verified to ensure no existing behavior was affected.
+
+            ==================================================
 
             ## Risks and Review Notes
-            Mention possible risks, edge cases, breaking changes, or "No major risks identified".
 
-            === CHANGELOG FORMAT ===
+            Provide reviewer guidance.
+
+            Include:
+
+            - risks;
+            - edge cases;
+            - possible regressions;
+            - deployment considerations;
+            - areas requiring special attention during review.
+
+            If no significant risk is visible write:
+
+            "No major risks identified."
+
+            ==================================================
+            CHANGELOG REQUIREMENTS
+            ==================================================
+
             IMPORTANT:
-            The changelog must be only the entry content for this PR.
-            Do NOT include "# Changelog".
-            Do NOT include the PR number, title, author, date, or separator.
-            Do NOT invent changes.
-            Make it human-readable and useful for developers.
 
-            Use this exact structure:
+            The generated changelog content will be inserted into an existing CHANGELOG.md file.
+
+            Do NOT generate:
+
+            - # Changelog
+            - PR number
+            - PR title
+            - Author
+            - Date
+            - Separators
+
+            Generate ONLY the changelog entry content.
+
+            Do NOT reference previous changelog entries.
+
+            Do NOT rewrite previous entries.
+
+            Do NOT invent changes.
+
+            Write for future developers reading project history.
+
+            Use exactly this structure:
 
             ### Added
-            - New files, functions, components, or features.
+
+            List:
+
+            - newly added functionality;
+            - components;
+            - services;
+            - APIs;
+            - tests;
+            - capabilities;
+            - files.
+
+            If nothing was added write:
+
+            - No new functionality added.
+
+            ==================================================
 
             ### Changed
-            - Modified behavior, refactoring, UI updates, or logic changes.
+
+            Describe:
+
+            - implementation updates;
+            - behavior changes;
+            - refactoring;
+            - workflow improvements;
+            - UI updates;
+            - architecture updates.
+
+            Explain impact where relevant.
+
+            ==================================================
 
             ### Fixed
-            - Bug fixes if clearly visible in the diff.
+
+            List only fixes clearly visible in the diff.
+
+            If no fix can be identified write:
+
+            - No explicit bug fix identified from the diff.
+
+            ==================================================
 
             ### Technical
-            - Internal changes, tests, dependency updates, CI/CD changes, configuration changes.
+
+            List:
+
+            - dependency updates;
+            - configuration changes;
+            - CI/CD updates;
+            - infrastructure updates;
+            - internal implementation improvements;
+            - test updates.
+
+            ==================================================
 
             ### Notes
-            - Important review notes, risks, testing notes, or breaking changes.
 
-            === CRITICAL RULES ===
-            1. Analyze the actual diff content, not only file names.
-            2. Mention real function, component, class, or file names when visible.
-            3. Explain why changes matter.
-            4. Do not invent changes.
-            5. Keep it concise but useful for code reviewers.
-            6. Return only valid JSON.`;
+            Include:
+
+            - review considerations;
+            - testing considerations;
+            - risks;
+            - limitations;
+            - follow-up work if visible.
+
+            ==================================================
+            QUALITY RULES
+            ==================================================
+
+            1. Analyze actual code changes, not only filenames.
+            2. Mention real files when visible.
+            3. Mention real classes and functions when visible.
+            4. Explain what changed.
+            5. Explain why it changed.
+            6. Explain what is affected.
+            7. Explain what should be tested.
+            8. Explain risks when visible.
+            9. Never invent information.
+            10. Use natural human language.
+            11. Make the output useful for both project managers and developers.
+            12. Keep explanations concise but meaningful.
+            13. Prefer clarity over verbosity.
+            14. Return ONLY valid JSON.
+            `;
 
             try {
               const response = await fetch(process.env.AI_ENDPOINT, {
@@ -414,8 +659,8 @@ jobs:
                       content: prompt
                     }
                   ],
-                  temperature: 0.4,
-                  max_tokens: 3000,
+                  temperature: 0.2,
+                  max_tokens: 5000,
                   response_format: {
                     type: "json_object"
                   }
