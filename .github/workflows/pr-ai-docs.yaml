@@ -70,7 +70,7 @@ jobs:
                 changeType: changeType,
                 additions: f.additions,
                 deletions: f.deletions,
-                patch: patch.slice(0, 8000),
+                patch: patch.slice(0, 10000),
                 summary: {
                   isConfigFile,
                   hasImportChanges,
@@ -315,68 +315,113 @@ jobs:
             let prDescription = generateDetailedFallback();
             let changelog = generateDetailedChangelog();
 
-            // Prepare enhanced prompt for AI analysis
-            const prompt = [
-              "You are an experienced senior software engineer and release manager analyzing a GitHub Pull Request.",
-              "Your job is to generate clear, detailed, human-readable documentation that helps reviewers understand the changes.",
-              "",
-              "IMPORTANT: Analyze the actual diff content, not just file metadata.",
-              "Focus on WHAT changed, WHY it matters, and HOW it affects the application.",
-              "",
-              "Return STRICT JSON ONLY with these keys:",
-              "- pr_description (markdown string)",
-              "- changelog (markdown string)",
-              "",
-              "Rules:",
-              "✓ Extract meaningful information from diffs - identify functions, components, logic changes",
-              "✓ Explain the purpose and impact of changes",
-              "✓ Group related changes logically",
-              "✓ Be specific about what changed and why",
-              "✓ Mention file names and functions only when relevant",
-              "✓ Focus on developer experience and user impact",
-              "✓ Do NOT invent changes - only describe what you see in the diff",
-              "✓ For small diffs: be concise but meaningful",
-              "✓ For large diffs: organize into clear sections",
-              "",
-              "PR Title: " + context.payload.pull_request.title,
-              "PR Body: " + (context.payload.pull_request.body || "(no description provided)"),
-              "",
-              "Stats:",
-              JSON.stringify(stats, null, 2),
-              "",
-              "Changed files with details:",
-              JSON.stringify(changes.map(f => ({
-                filename: f.filename,
-                status: f.status,
-                additions: f.additions,
-                deletions: f.deletions,
-                summary: f.summary,
-                patchPreview: f.patch.split('\n').slice(0, 30).join('\n')
-              })), null, 2),
-              "",
-              "STRUCTURE FOR pr_description:",
-              "## Summary",
-              "2-4 sentences explaining the purpose, what problem it solves, and main area affected.",
-              "",
-              "## What Changed",
-              "Organized bullet points explaining changes by area (Frontend/Backend/Config/etc)",
-              "Each bullet explains WHAT and WHY it matters.",
-              "",
-              "## Technical Details",
-              "Implementation details relevant for code reviewers.",
-              "New components, functions, APIs, or configuration changes.",
-              "",
-              "## Testing",
-              "Describe testing approach based on changes.",
-              "If tests present, mention them. If not, suggest manual validation.",
-              "",
-              "## Risks and Review Notes",
-              "Potential risks, edge cases, or areas needing attention.",
-              "",
-              "STRUCTURE FOR changelog:",
-              "Use Added/Changed/Fixed/Technical/Notes sections.",
-              "Be specific about what was added, changed, or fixed."
-            ].join("\n");
+            // Build comprehensive diff content for AI
+            const diffContent = changes.map((f, idx) => {
+              return `FILE ${idx + 1}: ${f.filename}
+STATUS: ${f.status}
+STATS: +${f.additions}/-${f.deletions}
+CONTENT:
+${f.patch}
+---`;
+            }).join('\n\n');
+
+            // Prepare ENHANCED prompt for AI analysis
+            const prompt = `You are a senior software engineer expert at analyzing GitHub Pull Requests and writing technical documentation.
+
+CRITICAL INSTRUCTION: You MUST analyze the ACTUAL DIFF CONTENT below, not just file names or statistics.
+Extract specific changes, functions, logic modifications, and their impact.
+Provide detailed, actionable analysis that helps reviewers understand exactly what changed and why.
+
+Return ONLY valid JSON with exactly these keys (no markdown formatting outside JSON):
+{
+  "pr_description": "markdown content",
+  "changelog": "markdown content"
+}
+
+=== PR CONTEXT ===
+Title: ${context.payload.pull_request.title}
+Body: ${context.payload.pull_request.body || "(no description)"}
+
+Stats:
+- Total Files: ${stats.fileCount}
+- Total Additions: ${stats.additions}
+- Total Deletions: ${stats.deletions}
+- Frontend Files: ${stats.frontendFiles}
+- Backend Files: ${stats.backendFiles}
+- Config Files: ${stats.configFiles}
+- Test Files: ${stats.testFiles}
+
+=== ACTUAL DIFF CONTENT TO ANALYZE ===
+${diffContent}
+
+=== INSTRUCTIONS FOR PR DESCRIPTION ===
+Structure your pr_description with these sections (markdown format):
+
+## Summary
+- Write 2-4 sentences explaining the PURPOSE of this PR
+- What problem does it solve? What improvement does it introduce?
+- Which part of the application is affected?
+
+## What Changed
+- List changes organized by category (Frontend/Backend/Config/Tests)
+- For EACH change, explain WHAT was modified and WHY it matters
+- Example: "Updated navigation component to use new routing hooks - improves performance and maintainability"
+- Include specific function/component names when relevant
+- Mention dependency updates if present
+
+## Technical Details
+- Extract specific implementation details from the diff
+- What new functions, components, or APIs were added?
+- What existing logic was changed?
+- Any important refactoring or optimization?
+- Configuration changes and their impact?
+
+## Testing
+- Based on the diff, what testing is needed?
+- If test files are included, mention them specifically
+- Suggest specific manual test scenarios
+- Example: "Test user login flow with new auth middleware"
+
+## Risks and Review Notes
+- Identify potential risks or edge cases from the diff
+- Performance implications?
+- Breaking changes?
+- Dependencies on other systems?
+- If no risks: "No major risks identified"
+
+=== INSTRUCTIONS FOR CHANGELOG ===
+Structure your changelog with these sections:
+
+# Changelog
+
+## Added
+- New files, functions, components, or features added
+- Use specific names from the diff
+
+## Changed
+- Modified behavior, refactored code, updated UI
+- Be specific about what changed and how
+
+## Fixed
+- Bug fixes with specific descriptions
+
+## Technical
+- Internal changes, dependency updates, CI/CD changes
+- Configuration file modifications
+
+## Notes
+- Anything reviewers should know
+- Breaking changes or important considerations
+
+=== CRITICAL RULES ===
+1. Analyze the DIFF CONTENT, not just file metadata
+2. Be SPECIFIC - mention actual function/component names from diff
+3. Explain WHY changes matter, not just WHAT changed
+4. Extract meaningful technical details from the code
+5. Do NOT invent changes - only describe what you see in diff
+6. Make it useful for code reviewers
+7. Return ONLY JSON, no markdown outside the JSON structure
+8. Keep explanations concise but informative`;
 
             try {
               const response = await fetch(process.env.AI_ENDPOINT, {
@@ -390,15 +435,15 @@ jobs:
                   messages: [
                     {
                       role: "system",
-                      content: "You are GitHub Copilot acting as an expert code reviewer and technical writer. Analyze PRs with attention to detail and generate clear, actionable documentation."
+                      content: "You are GitHub Copilot, an expert code reviewer and technical documentation writer. Analyze diffs carefully and provide detailed, actionable analysis. Always return valid JSON as requested."
                     },
                     {
                       role: "user",
                       content: prompt
                     }
                   ],
-                  temperature: 0.3,
-                  max_tokens: 2000,
+                  temperature: 0.4,
+                  max_tokens: 3000,
                   response_format: {
                     type: "json_object"
                   }
@@ -407,26 +452,33 @@ jobs:
 
               if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`AI request failed with status ${response.status}: ${errorText}`);
+                core.warning(`AI request failed with status ${response.status}: ${errorText}`);
+                throw new Error(`AI request failed with status ${response.status}`);
               }
 
               const data = await response.json();
               const content = data?.choices?.[0]?.message?.content;
               
               if (content) {
-                const parsed = JSON.parse(content);
-                
-                if (parsed?.pr_description && parsed.pr_description.trim().length > 50) {
-                  prDescription = parsed.pr_description;
-                }
-                
-                if (parsed?.changelog && parsed.changelog.trim().length > 50) {
-                  changelog = parsed.changelog;
+                try {
+                  const parsed = JSON.parse(content);
+                  
+                  if (parsed?.pr_description && parsed.pr_description.trim().length > 100) {
+                    prDescription = parsed.pr_description;
+                    core.info("✓ AI analysis successful - detailed PR description generated");
+                  }
+                  
+                  if (parsed?.changelog && parsed.changelog.trim().length > 50) {
+                    changelog = parsed.changelog;
+                    core.info("✓ AI changelog generated");
+                  }
+                } catch (parseError) {
+                  core.warning(`Failed to parse AI response: ${parseError.message}`);
                 }
               }
             } catch (error) {
-              core.warning(`AI generation encountered an issue, using enhanced fallback: ${error.message}`);
-              core.info("Fallback provides detailed analysis based on file changes and diff content");
+              core.warning(`AI generation failed, using enhanced fallback: ${error.message}`);
+              core.info("ℹ️ Fallback provides detailed analysis from file changes and diff content");
             }
 
             core.setOutput("pr_description", prDescription);
@@ -484,13 +536,13 @@ jobs:
         with:
           script: |
             const summary = `
-            ✨ **Automated Analysis Complete**
+            ✨ **Automated PR Analysis Complete**
             
             - **Files analyzed**: ${{ fromJson(steps.changes.outputs.stats).fileCount }}
             - **Lines changed**: +${{ fromJson(steps.changes.outputs.stats).additions }}/-${{ fromJson(steps.changes.outputs.stats).deletions }}
             - **Changelog**: Generated as CHANGELOG_PR.md
             
-            See the PR description above for detailed analysis.
+            👆 See the PR description above for detailed analysis.
             `;
             
             github.rest.issues.createComment({
