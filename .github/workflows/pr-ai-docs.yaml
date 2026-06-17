@@ -501,34 +501,77 @@ Structure your changelog with these sections:
             
             core.info("✓ PR description updated with detailed analysis");
 
-      - name: Write changelog file
+      - name: Checkout main branch to update CHANGELOG.md
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Read existing CHANGELOG.md
+        id: read_changelog
         run: |
-          cat > CHANGELOG_PR.md << 'EOF'
-          # Changelog for PR #${{ github.event.pull_request.number }}
-          
-          Generated automatically on: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          if [ -f CHANGELOG.md ]; then
+            echo "changelog_exists=true" >> $GITHUB_OUTPUT
+            cat CHANGELOG.md > /tmp/changelog.txt
+          else
+            echo "changelog_exists=false" >> $GITHUB_OUTPUT
+            echo "# Changelog
 
-          ${{ steps.ai.outputs.changelog }}
+All notable changes to this project will be documented in this file.
+
+---" > /tmp/changelog.txt
+          fi
+
+      - name: Update and append to CHANGELOG.md
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          NEW_CHANGELOG: ${{ steps.ai.outputs.changelog }}
+        run: |
+          # Create the PR entry with header
+          cat > /tmp/pr_entry.txt << 'EOF'
+          ## PR #${{ env.PR_NUMBER }} - ${{ env.PR_TITLE }}
+          **Author**: @${{ env.PR_AUTHOR }}  
+          **Date**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+
+          ${{ env.NEW_CHANGELOG }}
+
+          ---
+
           EOF
-          cat CHANGELOG_PR.md
+          
+          # Read existing changelog
+          EXISTING=$(cat /tmp/changelog.txt)
+          
+          # Combine: new entry + existing changelog
+          {
+            cat /tmp/pr_entry.txt
+            echo ""
+            echo "$EXISTING"
+          } > CHANGELOG.md
+          
+          # Show the updated file
+          echo "✓ CHANGELOG.md updated:"
+          head -50 CHANGELOG.md
 
-      - name: Commit and push changelog
+      - name: Commit and push CHANGELOG.md to main
         if: github.event.pull_request.head.repo.full_name == github.repository
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add CHANGELOG_PR.md
+          git add CHANGELOG.md
 
           if git diff --cached --quiet; then
             echo "ℹ️ No changelog changes to commit"
             exit 0
           fi
 
-          git commit -m "chore: auto-generate changelog for PR #${{ github.event.pull_request.number }}"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          git commit -m "chore: update CHANGELOG.md - PR #${{ github.event.pull_request.number }}"
+          git push origin main
           
-          echo "✓ Changelog updated and pushed"
+          echo "✓ CHANGELOG.md updated and pushed to main"
 
       - name: Comment on PR with status
         if: always()
@@ -540,7 +583,7 @@ Structure your changelog with these sections:
             
             - **Files analyzed**: ${{ fromJson(steps.changes.outputs.stats).fileCount }}
             - **Lines changed**: +${{ fromJson(steps.changes.outputs.stats).additions }}/-${{ fromJson(steps.changes.outputs.stats).deletions }}
-            - **Changelog**: Generated as CHANGELOG_PR.md
+            - **Changelog**: Updated in main branch (CHANGELOG.md)
             
             👆 See the PR description above for detailed analysis.
             `;
