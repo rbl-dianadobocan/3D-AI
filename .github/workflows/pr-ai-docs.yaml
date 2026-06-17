@@ -1,5 +1,5 @@
 name: PR AI Docs
-#test
+
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -238,9 +238,7 @@ jobs:
             };
 
             const generateDetailedChangelog = () => {
-              const sections = ["# Changelog"];
-              
-              sections.push("");
+              const sections = [];
               sections.push("## Added");
               const addedItems = changes
                 .filter(f => f.status === 'added')
@@ -328,7 +326,7 @@ ${diffContent}
 
 Analyze this diff and provide:
 1. pr_description: Clear explanation of what changed and why
-2. changelog: Organized changelog entries (Added/Changed/Fixed/Technical/Notes)
+2. changelog: Content for this PR only. Use sections like Added/Changed/Fixed/Technical/Notes. Do NOT include a "# Changelog" heading.
 
 Be specific, mention actual function/component names, explain impact.`;
 
@@ -401,59 +399,76 @@ Be specific, mention actual function/component names, explain impact.`;
               body: process.env.PR_DESCRIPTION
             });
 
-      - name: Checkout main branch
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
       - name: Update CHANGELOG.md
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          CHANGELOG_CONTENT: ${{ steps.ai.outputs.changelog }}
         run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
-          PR_DATE=$(date -u +'%Y-%m-%d')
-          NEW_CHANGELOG="${{ steps.ai.outputs.changelog }}"
-          
-          # Create temp file with new entry
-          cat > /tmp/new_entry.md << 'ENTRY'
-          ## PR #${PR_NUMBER} - ${PR_TITLE}
-          **Author**: @${PR_AUTHOR}  
-          **Date**: ${PR_DATE}
-          
-          ${NEW_CHANGELOG}
-          
-          ---
-          
-          ENTRY
-          
-          # Check if CHANGELOG.md exists
-          if [ -f CHANGELOG.md ]; then
-            # Prepend new entry to existing changelog
-            cat /tmp/new_entry.md CHANGELOG.md > CHANGELOG.md.tmp
-            mv CHANGELOG.md.tmp CHANGELOG.md
-          else
-            # Create new changelog with header
-            echo "# Changelog" > CHANGELOG.md
-            echo "" >> CHANGELOG.md
-            echo "All notable changes to this project will be documented in this file." >> CHANGELOG.md
-            echo "" >> CHANGELOG.md
-            echo "---" >> CHANGELOG.md
-            echo "" >> CHANGELOG.md
-            cat /tmp/new_entry.md >> CHANGELOG.md
-          fi
+          python3 << 'PYEOF'
+          import os, re
+          from datetime import datetime, timezone
+
+          pr_number = os.environ['PR_NUMBER']
+          pr_title = os.environ['PR_TITLE']
+          pr_author = os.environ['PR_AUTHOR']
+          pr_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+          changelog_content = os.environ['CHANGELOG_CONTENT'].strip()
+
+          new_entry = (
+              f"## PR #{pr_number} - {pr_title}\n"
+              f"**Author**: @{pr_author}  \n"
+              f"**Date**: {pr_date}\n\n"
+              f"{changelog_content}\n\n"
+              f"---\n\n"
+          )
+
+          MARKER = "<!-- CHANGELOG ENTRIES -->\n"
+          HEADER = (
+              "# Changelog\n\n"
+              "All notable changes to this project will be documented in this file.\n\n"
+              + MARKER + "\n"
+          )
+
+          changelog_path = 'CHANGELOG.md'
+
+          if not os.path.exists(changelog_path):
+              with open(changelog_path, 'w') as f:
+                  f.write(HEADER + new_entry)
+          else:
+              with open(changelog_path, 'r') as f:
+                  content = f.read()
+
+              pattern = rf'^## PR #{re.escape(pr_number)} - .+?(?=^## PR #|\Z)'
+              content = re.sub(pattern, '', content, flags=re.DOTALL | re.MULTILINE)
+
+              content = re.sub(r'\n{4,}', '\n\n\n', content)
+
+              if MARKER not in content:
+                  first_h2 = re.search(r'^## ', content, re.MULTILINE)
+                  if first_h2:
+                      content = content[:first_h2.start()] + MARKER + '\n' + content[first_h2.start():]
+                  else:
+                      content = content.rstrip() + '\n\n' + MARKER + '\n\n'
+
+              insert_pos = content.index(MARKER) + len(MARKER)
+              content = content[:insert_pos] + '\n' + new_entry + content[insert_pos:]
+
+              content = re.sub(r'\n{4,}', '\n\n\n', content)
+
+              with open(changelog_path, 'w') as f:
+                  f.write(content)
+          PYEOF
 
       - name: Commit and push CHANGELOG
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          
           git add CHANGELOG.md
-          
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 0
           fi
-          
           git commit -m "chore: update CHANGELOG.md for PR #${{ github.event.pull_request.number }}"
-          git push origin main
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
