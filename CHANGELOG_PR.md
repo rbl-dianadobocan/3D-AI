@@ -13,6 +13,7 @@ Generated automatically on: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
 - New function: `COLUMNS` in components/tasks/kanban-storage.ts
 
 ## Changed
+- CHANGELOG_PR.md
 - components/tasks/kanban-board.tsx (dependencies updated)
 - components/ui/input.tsx
 
@@ -23,5 +24,5 @@ Generated automatically on: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
 - Dependencies or imports updated
 
 ## Notes
-- Total changes: 3 files, +189/-4 lines
+- Total changes: 4 files, +201/-9 lines
 - Frontend impact: 3 file(s)
