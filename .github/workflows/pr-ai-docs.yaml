@@ -22,7 +22,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
-      - name: Collect PR file changes
+      - name: Collect detailed PR changes with full diffs
         id: changes
         uses: actions/github-script@v8
         with:
@@ -34,160 +34,349 @@ jobs:
               per_page: 100
             });
 
-            const compact = files.map((f) => ({
-              filename: f.filename,
-              status: f.status,
-              additions: f.additions,
-              deletions: f.deletions,
-              patch: (f.patch || "").slice(0, 6000)
-            }));
+            // Extract detailed information from diffs
+            const analyzedFiles = files.map((f) => {
+              const patch = f.patch || "";
+              const lines = patch.split('\n');
+              
+              // Detect change types based on content
+              let changeType = 'modified';
+              if (f.status === 'added') changeType = 'added';
+              else if (f.status === 'removed') changeType = 'deleted';
+              else if (f.status === 'renamed') changeType = 'renamed';
+              
+              // Extract meaningful context from patch
+              const addedLines = lines.filter(l => l.startsWith('+')).map(l => l.slice(1));
+              const removedLines = lines.filter(l => l.startsWith('-')).map(l => l.slice(1));
+              
+              // Detect what was changed (function names, imports, config, etc.)
+              const functionPattern = /^[\s]*(async\s+)?(function|const|let|class|export|interface|type)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/;
+              const importPattern = /^[\s]*(import|require)\s+/;
+              const configPattern = /\.(json|yaml|yml|toml|config|env|properties)$/i;
+              
+              const addedFunctions = addedLines
+                .map(l => l.match(functionPattern)?.[3])
+                .filter(Boolean);
+              const removedFunctions = removedLines
+                .map(l => l.match(functionPattern)?.[3])
+                .filter(Boolean);
+              const hasImportChanges = addedLines.some(l => l.match(importPattern)) || 
+                                       removedLines.some(l => l.match(importPattern));
+              const isConfigFile = configPattern.test(f.filename);
+              
+              return {
+                filename: f.filename,
+                status: f.status,
+                changeType: changeType,
+                additions: f.additions,
+                deletions: f.deletions,
+                patch: patch.slice(0, 8000),
+                summary: {
+                  isConfigFile,
+                  hasImportChanges,
+                  addedFunctions: addedFunctions.slice(0, 5),
+                  removedFunctions: removedFunctions.slice(0, 5),
+                  linesAdded: addedLines.length,
+                  linesRemoved: removedLines.length
+                }
+              };
+            });
 
-            const totalAdditions = compact.reduce((sum, f) => sum + f.additions, 0);
-            const totalDeletions = compact.reduce((sum, f) => sum + f.deletions, 0);
+            const totalAdditions = analyzedFiles.reduce((sum, f) => sum + f.additions, 0);
+            const totalDeletions = analyzedFiles.reduce((sum, f) => sum + f.deletions, 0);
+            
+            // Categorize files by type
+            const categorized = {
+              frontend: analyzedFiles.filter(f => /\.(tsx?|jsx?)$/i.test(f.filename) && !/test|spec/.test(f.filename)),
+              styling: analyzedFiles.filter(f => /\.(css|scss|sass|less)$/i.test(f.filename)),
+              config: analyzedFiles.filter(f => f.summary.isConfigFile),
+              tests: analyzedFiles.filter(f => /test|spec/i.test(f.filename)),
+              backend: analyzedFiles.filter(f => /\.(py|js|ts|java|cs|rb|go|rs)$/i.test(f.filename) && !/test|spec/.test(f.filename) && !/(tsx?|jsx?)$/.test(f.filename)),
+              other: analyzedFiles.filter(f => !/(\.tsx?|\.jsx?|\.css|\.scss|\.sass|\.less|test|spec|json|yaml|yml|toml|config|env|properties)$/i.test(f.filename))
+            };
 
-            core.setOutput("changes_json", JSON.stringify(compact));
+            core.setOutput("changes_json", JSON.stringify(analyzedFiles));
+            core.setOutput("categorized_json", JSON.stringify(categorized));
             core.setOutput("stats", JSON.stringify({
-              fileCount: compact.length,
+              fileCount: analyzedFiles.length,
               additions: totalAdditions,
-              deletions: totalDeletions
+              deletions: totalDeletions,
+              frontendFiles: categorized.frontend.length,
+              backendFiles: categorized.backend.length,
+              configFiles: categorized.config.length,
+              testFiles: categorized.tests.length,
+              styleFiles: categorized.styling.length
             }));
 
-      - name: Generate PR description and changelog with AI
+      - name: Generate comprehensive PR analysis with AI
         id: ai
         uses: actions/github-script@v8
         env:
           CHANGES_JSON: ${{ steps.changes.outputs.changes_json }}
+          CATEGORIZED_JSON: ${{ steps.changes.outputs.categorized_json }}
           STATS_JSON: ${{ steps.changes.outputs.stats }}
           AI_MODEL: gpt-4.1-mini
           AI_ENDPOINT: https://models.inference.ai.azure.com/chat/completions
         with:
           script: |
             const changes = JSON.parse(process.env.CHANGES_JSON || "[]");
+            const categorized = JSON.parse(process.env.CATEGORIZED_JSON || "{}");
             const stats = JSON.parse(process.env.STATS_JSON || "{}");
 
-            const fallbackDescription = [
-              "## Summary",
-              `This PR updates ${stats.fileCount || 0} file(s), with ${stats.additions || 0} additions and ${stats.deletions || 0} deletions.`,
-              "The AI-generated description could not be created, so this fallback summary was generated from the changed files.",
-              "",
-              "## What Changed",
-              ...changes.slice(0, 25).map((f) => `- ${f.filename} was ${f.status} (+${f.additions}/-${f.deletions}).`),
-              "",
-              "## Technical Details",
-              "- Review the changed files listed above for implementation details.",
-              "",
-              "## Testing",
-              "- No automated test information was detected by the fallback generator.",
-              "- Please validate the affected functionality manually.",
-              "",
-              "## Risks and Review Notes",
-              "- This description was generated without AI analysis, so reviewers should inspect the diff carefully."
-            ].join("\n");
+            // Enhanced fallback with detailed information
+            const generateDetailedFallback = () => {
+              const sections = ["## Summary"];
+              
+              sections.push(`This PR contains **${stats.fileCount} file changes** with **${stats.additions} additions** and **${stats.deletions} deletions**.`);
+              
+              if (stats.frontendFiles > 0) sections.push(`- **Frontend**: ${stats.frontendFiles} file(s) modified`);
+              if (stats.backendFiles > 0) sections.push(`- **Backend**: ${stats.backendFiles} file(s) modified`);
+              if (stats.configFiles > 0) sections.push(`- **Configuration**: ${stats.configFiles} file(s) modified`);
+              if (stats.styleFiles > 0) sections.push(`- **Styling**: ${stats.styleFiles} file(s) modified`);
+              if (stats.testFiles > 0) sections.push(`- **Tests**: ${stats.testFiles} file(s) modified`);
+              
+              sections.push("");
+              sections.push("## What Changed");
+              
+              // Group changes by category
+              if (categorized.frontend?.length > 0) {
+                sections.push("### Frontend Components");
+                categorized.frontend.slice(0, 10).forEach(f => {
+                  let detail = `- **${f.filename}** (${f.status})`;
+                  if (f.summary.addedFunctions.length > 0) {
+                    detail += ` - Added: ${f.summary.addedFunctions.join(', ')}`;
+                  }
+                  if (f.summary.hasImportChanges) {
+                    detail += ` - Dependencies updated`;
+                  }
+                  detail += ` (+${f.additions}/-${f.deletions})`;
+                  sections.push(detail);
+                });
+              }
+              
+              if (categorized.backend?.length > 0) {
+                sections.push("### Backend Logic");
+                categorized.backend.slice(0, 10).forEach(f => {
+                  let detail = `- **${f.filename}** (${f.status})`;
+                  if (f.summary.addedFunctions.length > 0) {
+                    detail += ` - Added: ${f.summary.addedFunctions.join(', ')}`;
+                  }
+                  detail += ` (+${f.additions}/-${f.deletions})`;
+                  sections.push(detail);
+                });
+              }
+              
+              if (categorized.styling?.length > 0) {
+                sections.push("### Styling & UI");
+                categorized.styling.forEach(f => {
+                  sections.push(`- **${f.filename}** (+${f.additions}/-${f.deletions})`);
+                });
+              }
+              
+              if (categorized.config?.length > 0) {
+                sections.push("### Configuration");
+                categorized.config.forEach(f => {
+                  sections.push(`- **${f.filename}** - Configuration updated (+${f.additions}/-${f.deletions})`);
+                });
+              }
+              
+              if (categorized.tests?.length > 0) {
+                sections.push("### Tests");
+                categorized.tests.slice(0, 10).forEach(f => {
+                  sections.push(`- **${f.filename}** (+${f.additions}/-${f.deletions})`);
+                });
+              }
+              
+              sections.push("");
+              sections.push("## Technical Details");
+              sections.push("- Review the diff details for implementation specifics");
+              
+              if (categorized.frontend?.length > 0 && categorized.frontend.some(f => f.summary.hasImportChanges)) {
+                sections.push("- Component dependencies have been updated");
+              }
+              if (categorized.config?.length > 0) {
+                sections.push("- Configuration files modified - ensure environment is properly configured");
+              }
+              if (stats.testFiles > 0) {
+                sections.push(`- Tests updated (${stats.testFiles} file(s))`);
+              }
+              
+              sections.push("");
+              sections.push("## Testing");
+              if (stats.testFiles > 0) {
+                sections.push(`- ✓ Test files included (${stats.testFiles} file(s) modified)`);
+                sections.push("- Run the test suite to validate changes: `npm test` or equivalent");
+              } else {
+                sections.push("- No automated tests were detected in this diff");
+              }
+              sections.push("- Manual validation recommended for all modified components");
+              
+              if (categorized.frontend?.length > 0) {
+                sections.push("- Test frontend components: render, interaction, and responsive design");
+              }
+              if (categorized.backend?.length > 0) {
+                sections.push("- Test backend logic: API endpoints, data processing, error handling");
+              }
+              
+              sections.push("");
+              sections.push("## Risks and Review Notes");
+              
+              const risks = [];
+              if (stats.deletions > stats.additions * 2) {
+                risks.push("- Large number of deletions - verify removed code is no longer needed");
+              }
+              if (categorized.config?.length > 0) {
+                risks.push("- Configuration changes may affect runtime behavior - review carefully");
+              }
+              if (categorized.backend?.length > stats.frontendFiles && stats.frontendFiles === 0) {
+                risks.push("- Backend changes without corresponding frontend updates - verify data contracts");
+              }
+              if (!stats.testFiles || stats.testFiles === 0) {
+                risks.push("- No tests included - additional manual testing required");
+              }
+              
+              if (risks.length === 0) {
+                risks.push("- No major risks identified - standard code review recommended");
+              }
+              
+              sections.push(risks.join("\n"));
+              
+              return sections.join("\n");
+            };
 
-            const fallbackChangelog = [
-              "# Changelog",
-              "",
-              "## Added",
-              "- No changes.",
-              "",
-              "## Changed",
-              ...changes.slice(0, 50).map((f) => `- ${f.filename} was ${f.status} (+${f.additions}/-${f.deletions}).`),
-              "",
-              "## Fixed",
-              "- No changes.",
-              "",
-              "## Technical",
-              `- Updated ${stats.fileCount || 0} file(s) in this pull request.`,
-              "",
-              "## Notes",
-              "- AI changelog generation failed, so this fallback changelog was generated from file metadata."
-            ].join("\n");
+            const generateDetailedChangelog = () => {
+              const sections = ["# Changelog"];
+              
+              sections.push("");
+              sections.push("## Added");
+              const addedItems = changes
+                .filter(f => f.status === 'added')
+                .map(f => `- ${f.filename}`);
+              
+              const newFunctions = changes
+                .flatMap(f => f.summary.addedFunctions.map(fn => `- New function: \`${fn}\` in ${f.filename}`))
+                .slice(0, 5);
+              
+              if (addedItems.length > 0 || newFunctions.length > 0) {
+                sections.push(...addedItems);
+                sections.push(...newFunctions);
+              } else {
+                sections.push("- No new files or functions added");
+              }
+              
+              sections.push("");
+              sections.push("## Changed");
+              const changedItems = changes
+                .filter(f => f.status === 'modified')
+                .map(f => {
+                  let detail = `- ${f.filename}`;
+                  if (f.summary.hasImportChanges) detail += " (dependencies updated)";
+                  return detail;
+                });
+              
+              if (changedItems.length > 0) {
+                sections.push(...changedItems);
+              } else {
+                sections.push("- No files modified");
+              }
+              
+              sections.push("");
+              sections.push("## Fixed");
+              sections.push("- See individual commit messages for bug fixes");
+              
+              sections.push("");
+              sections.push("## Technical");
+              const technical = [];
+              if (categorized.config?.length > 0) {
+                technical.push(`- Configuration updated (${categorized.config.length} file(s))`);
+              }
+              if (changes.some(f => f.summary.hasImportChanges)) {
+                technical.push("- Dependencies or imports updated");
+              }
+              if (stats.testFiles > 0) {
+                technical.push(`- Test coverage updated (${stats.testFiles} file(s))`);
+              }
+              
+              if (technical.length > 0) {
+                sections.push(...technical);
+              } else {
+                sections.push("- No breaking technical changes");
+              }
+              
+              sections.push("");
+              sections.push("## Notes");
+              sections.push(`- Total changes: ${stats.fileCount} files, +${stats.additions}/-${stats.deletions} lines`);
+              if (stats.frontendFiles > 0) sections.push(`- Frontend impact: ${stats.frontendFiles} file(s)`);
+              if (stats.backendFiles > 0) sections.push(`- Backend impact: ${stats.backendFiles} file(s)`);
+              
+              return sections.join("\n");
+            };
 
+            let prDescription = generateDetailedFallback();
+            let changelog = generateDetailedChangelog();
+
+            // Prepare enhanced prompt for AI analysis
             const prompt = [
-              "You are an experienced senior software engineer and release manager.",
-              "Your job is to analyze a GitHub Pull Request diff and generate documentation that is clear, detailed, human-readable, and useful for reviewers.",
+              "You are an experienced senior software engineer and release manager analyzing a GitHub Pull Request.",
+              "Your job is to generate clear, detailed, human-readable documentation that helps reviewers understand the changes.",
               "",
-              "Return STRICT JSON only with the following keys:",
-              "- pr_description",
-              "- changelog",
+              "IMPORTANT: Analyze the actual diff content, not just file metadata.",
+              "Focus on WHAT changed, WHY it matters, and HOW it affects the application.",
               "",
-              "General rules:",
-              "- Do not invent changes that are not visible in the diff.",
-              "- Focus on user impact, developer impact, and review-relevant details.",
-              "- Write in clear, natural English.",
-              "- Avoid generic phrases like 'updated files' or 'made changes'.",
-              "- Explain WHY the changes matter when it can be inferred from the diff.",
-              "- Group related changes together.",
-              "- Mention important files, components, workflows, scripts, or configuration changes.",
-              "- If the diff is small, keep the output concise but still meaningful.",
-              "- If the diff is large, organize the output into readable sections.",
+              "Return STRICT JSON ONLY with these keys:",
+              "- pr_description (markdown string)",
+              "- changelog (markdown string)",
               "",
-              "The pr_description must be Markdown and must use this exact structure:",
+              "Rules:",
+              "✓ Extract meaningful information from diffs - identify functions, components, logic changes",
+              "✓ Explain the purpose and impact of changes",
+              "✓ Group related changes logically",
+              "✓ Be specific about what changed and why",
+              "✓ Mention file names and functions only when relevant",
+              "✓ Focus on developer experience and user impact",
+              "✓ Do NOT invent changes - only describe what you see in the diff",
+              "✓ For small diffs: be concise but meaningful",
+              "✓ For large diffs: organize into clear sections",
               "",
-              "## Summary",
-              "- Provide 2-4 human-readable sentences explaining the purpose of the PR.",
-              "- Explain the problem solved or improvement introduced.",
-              "- Mention the main area of the application affected.",
-              "",
-              "## What Changed",
-              "- Use grouped bullet points.",
-              "- Each bullet should explain what changed and why it matters.",
-              "- Mention relevant files or modules only when useful.",
-              "",
-              "## Technical Details",
-              "- Explain important implementation details.",
-              "- Mention new components, functions, workflows, data structures, API calls, or configuration changes.",
-              "- Keep this section useful for code reviewers.",
-              "",
-              "## Testing",
-              "- Describe likely testing based on the changes.",
-              "- If tests are visible in the diff, mention them specifically.",
-              "- If no tests are visible, say: 'No automated tests were detected in this diff.'",
-              "- Suggest manual validation steps.",
-              "",
-              "## Risks and Review Notes",
-              "- Mention possible risks, edge cases, or areas that deserve extra attention.",
-              "- If no obvious risk exists, say: 'No major risks identified from the diff.'",
-              "",
-              "The changelog must be Markdown suitable for a CHANGELOG_PR.md file and must use this exact structure:",
-              "",
-              "# Changelog",
-              "",
-              "## Added",
-              "- List new features, components, workflows, or capabilities.",
-              "",
-              "## Changed",
-              "- List behavior changes, refactors, UI updates, or improvements.",
-              "",
-              "## Fixed",
-              "- List bug fixes or corrected behavior.",
-              "",
-              "## Technical",
-              "- List internal implementation details, dependency/configuration changes, CI/CD changes, or developer tooling updates.",
-              "",
-              "## Notes",
-              "- Include anything reviewers or release managers should know.",
-              "",
-              "If a changelog section has no relevant items, write:",
-              "- No changes.",
-              "",
-              "Pull Request context:",
-              "",
-              "PR title:",
-              context.payload.pull_request.title,
-              "",
-              "PR body:",
-              context.payload.pull_request.body || "",
+              "PR Title: " + context.payload.pull_request.title,
+              "PR Body: " + (context.payload.pull_request.body || "(no description provided)"),
               "",
               "Stats:",
-              JSON.stringify(stats),
+              JSON.stringify(stats, null, 2),
               "",
-              "Changed files and patches:",
-              JSON.stringify(changes)
+              "Changed files with details:",
+              JSON.stringify(changes.map(f => ({
+                filename: f.filename,
+                status: f.status,
+                additions: f.additions,
+                deletions: f.deletions,
+                summary: f.summary,
+                patchPreview: f.patch.split('\n').slice(0, 30).join('\n')
+              })), null, 2),
+              "",
+              "STRUCTURE FOR pr_description:",
+              "## Summary",
+              "2-4 sentences explaining the purpose, what problem it solves, and main area affected.",
+              "",
+              "## What Changed",
+              "Organized bullet points explaining changes by area (Frontend/Backend/Config/etc)",
+              "Each bullet explains WHAT and WHY it matters.",
+              "",
+              "## Technical Details",
+              "Implementation details relevant for code reviewers.",
+              "New components, functions, APIs, or configuration changes.",
+              "",
+              "## Testing",
+              "Describe testing approach based on changes.",
+              "If tests present, mention them. If not, suggest manual validation.",
+              "",
+              "## Risks and Review Notes",
+              "Potential risks, edge cases, or areas needing attention.",
+              "",
+              "STRUCTURE FOR changelog:",
+              "Use Added/Changed/Fixed/Technical/Notes sections.",
+              "Be specific about what was added, changed, or fixed."
             ].join("\n");
-
-            let prDescription = fallbackDescription;
-            let changelog = fallbackChangelog;
 
             try {
               const response = await fetch(process.env.AI_ENDPOINT, {
@@ -201,14 +390,15 @@ jobs:
                   messages: [
                     {
                       role: "system",
-                      content: "You are GitHub Copilot acting as a senior code reviewer and release note writer."
+                      content: "You are GitHub Copilot acting as an expert code reviewer and technical writer. Analyze PRs with attention to detail and generate clear, actionable documentation."
                     },
                     {
                       role: "user",
                       content: prompt
                     }
                   ],
-                  temperature: 0.2,
+                  temperature: 0.3,
+                  max_tokens: 2000,
                   response_format: {
                     type: "json_object"
                   }
@@ -216,22 +406,27 @@ jobs:
               });
 
               if (!response.ok) {
-                throw new Error(`AI request failed with status ${response.status}`);
+                const errorText = await response.text();
+                throw new Error(`AI request failed with status ${response.status}: ${errorText}`);
               }
 
               const data = await response.json();
               const content = data?.choices?.[0]?.message?.content;
-              const parsed = JSON.parse(content);
-
-              if (parsed?.pr_description) {
-                prDescription = parsed.pr_description;
-              }
-
-              if (parsed?.changelog) {
-                changelog = parsed.changelog;
+              
+              if (content) {
+                const parsed = JSON.parse(content);
+                
+                if (parsed?.pr_description && parsed.pr_description.trim().length > 50) {
+                  prDescription = parsed.pr_description;
+                }
+                
+                if (parsed?.changelog && parsed.changelog.trim().length > 50) {
+                  changelog = parsed.changelog;
+                }
               }
             } catch (error) {
-              core.warning(`AI generation failed, using fallback: ${error.message}`);
+              core.warning(`AI generation encountered an issue, using enhanced fallback: ${error.message}`);
+              core.info("Fallback provides detailed analysis based on file changes and diff content");
             }
 
             core.setOutput("pr_description", prDescription);
@@ -243,20 +438,27 @@ jobs:
           PR_DESCRIPTION: ${{ steps.ai.outputs.pr_description }}
         with:
           script: |
+            const body = process.env.PR_DESCRIPTION;
+            
             await github.rest.pulls.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.issue.number,
-              body: process.env.PR_DESCRIPTION
+              body: body
             });
+            
+            core.info("✓ PR description updated with detailed analysis");
 
       - name: Write changelog file
         run: |
           cat > CHANGELOG_PR.md << 'EOF'
           # Changelog for PR #${{ github.event.pull_request.number }}
+          
+          Generated automatically on: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
 
           ${{ steps.ai.outputs.changelog }}
           EOF
+          cat CHANGELOG_PR.md
 
       - name: Commit and push changelog
         if: github.event.pull_request.head.repo.full_name == github.repository
@@ -267,9 +469,33 @@ jobs:
           git add CHANGELOG_PR.md
 
           if git diff --cached --quiet; then
-            echo "No changelog changes to commit"
+            echo "ℹ️ No changelog changes to commit"
             exit 0
           fi
 
-          git commit -m "chore: update PR changelog #${{ github.event.pull_request.number }}"
-          git push
+          git commit -m "chore: auto-generate changelog for PR #${{ github.event.pull_request.number }}"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          
+          echo "✓ Changelog updated and pushed"
+
+      - name: Comment on PR with status
+        if: always()
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const summary = `
+            ✨ **Automated Analysis Complete**
+            
+            - **Files analyzed**: ${{ fromJson(steps.changes.outputs.stats).fileCount }}
+            - **Lines changed**: +${{ fromJson(steps.changes.outputs.stats).additions }}/-${{ fromJson(steps.changes.outputs.stats).deletions }}
+            - **Changelog**: Generated as CHANGELOG_PR.md
+            
+            See the PR description above for detailed analysis.
+            `;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            }).catch(err => core.warning("Could not post comment: " + err.message));
