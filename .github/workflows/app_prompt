@@ -1,0 +1,53 @@
+Build a modern full-stack productivity dashboard called TeamPulse.
+
+Tech stack:
+- Next.js 15
+- TypeScript
+- Tailwind CSS
+- shadcn/ui
+- Recharts
+- Lucide Icons
+
+Requirements:
+
+Create a modern SaaS-style dashboard with:
+
+1. Dashboard page
+- KPI cards
+- Team productivity chart
+- Tasks completed chart
+- Recent activity feed
+
+2. Task Management page
+- Kanban board
+- Todo / In Progress / Done columns
+- Drag and drop support
+- Mock data
+
+3. Team page
+- Team member cards
+- Avatar
+- Role
+- Productivity score
+
+4. Settings page
+- Dark mode toggle
+- Notification preferences
+- User profile section
+
+Design requirements:
+- Modern SaaS look
+- Beautiful gradients
+- Responsive layout
+- Sidebar navigation
+- Clean typography
+- Smooth animations
+
+Generate:
+- Complete project structure
+- Reusable components
+- Mock data
+- README.md
+- Well-organized folders
+
+The application should be fully functional using mock data and look production-ready.
