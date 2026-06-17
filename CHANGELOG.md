@@ -1,5 +1,33 @@
 # Changelog
 
+<!-- PR-22-CHANGELOG-START -->
+## PR #22 - Date range filter
+
+**Author:** @rbl-dianadobocan
+**Date:** 2026-06-17
+
+### Added
+- Added `components/dashboard/date-range-filter.tsx`.
+- Added `lib/date-range-context.tsx`.
+
+### Changed
+- Updated `app/(dashboard)/dashboard/page.tsx` (+1/-0).
+- Updated `app/(dashboard)/layout.tsx` (+8/-1).
+- Updated `components/dashboard/activity-feed.tsx` (+24/-2).
+- Updated `components/dashboard/productivity-chart.tsx` (+21/-2).
+- Updated `components/dashboard/tasks-chart.tsx` (+21/-2).
+- Updated `components/layout/header.tsx` (+4/-1).
+- Updated `components/ui/input.tsx` (+1/-2).
+
+### Testing
+- No automated test files were detected in this PR.
+
+### Notes
+- Total scope: 9 file(s), +182/-10 lines.
+
+---
+<!-- PR-22-CHANGELOG-END -->
+
 <!-- PR-21-CHANGELOG-START -->
 ## PR #21 - Date range filter
 
