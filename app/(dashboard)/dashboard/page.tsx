@@ -19,6 +19,7 @@ export default function DashboardPage() {
       <Header
         title="Dashboard"
         description="Welcome back, Alex 👋"
+        showDateFilter
       />
 
       <div className="flex-1 p-6 space-y-6">

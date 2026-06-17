@@ -4,13 +4,15 @@ import { Bell, Search, Sun, Moon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateRangeFilter } from "@/components/dashboard/date-range-filter";
 
 interface HeaderProps {
   title: string;
   description?: string;
+  showDateFilter?: boolean;
 }
 
-export function Header({ title, description }: HeaderProps) {
+export function Header({ title, description, showDateFilter }: HeaderProps) {
   const { theme, setTheme } = useTheme();
 
   return (
@@ -25,6 +27,7 @@ export function Header({ title, description }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-3">
+        {showDateFilter && <DateRangeFilter />}
         {/* Search */}
         <div className="relative hidden sm:block">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
