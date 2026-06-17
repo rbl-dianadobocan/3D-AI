@@ -307,9 +307,11 @@ The `suppressHydrationWarning` on `<html>` in `app/layout.tsx` is intentional. I
 ### Dark mode not working for a new component
 
 1. Ensure you are using semantic CSS token classes (e.g. `bg-card`, `text-foreground`).
-2. For colours not covered by the token system, use Tailwind's `dark:` variant explicitly:
+2. For colors not covered by the token system, use Tailwind's `dark:` variant with the closest semantic token:
    ```tsx
-   className="text-slate-600 dark:text-slate-400"
+   className="text-muted-foreground dark:text-muted-foreground"
+   // or, if no semantic token fits, use the CSS variable directly:
+   className="[color:hsl(var(--muted-foreground)/0.8)]"
    ```
 
 ### Drag-and-drop not activating

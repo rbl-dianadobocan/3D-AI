@@ -231,7 +231,7 @@ Members are sorted: **online** first, then **away**, then **offline** (using a s
 
 Each card shows:
 - **Avatar** — 48 × 48 px circle with initials and gradient background
-- **Status dot** — 12 × 12 px coloured circle overlaid on the avatar (green = online, amber = away, slate = offline)
+- An online status dot (12 × 12 px colored circle overlaid on the avatar: green = online, amber = away, slate = offline)
 - **Name** and **role** title
 - **Department badge** — coloured by department (Engineering → purple, Design → info, Infrastructure → warning, Product → success, Quality → purple, Data → info)
 - **Status badge** — "Online" / "Away" / "Offline" with outline style

@@ -1,6 +1,6 @@
 # TeamPulse — Modern Productivity Dashboard
 
-> A production-ready SaaS-style team productivity dashboard built with **Next.js** (App Router), **TypeScript**, **Tailwind CSS v4**, **Radix UI**, **Recharts**, and **@dnd-kit**.
+> A SaaS-style team productivity dashboard (demo/prototype) built with **Next.js** (App Router), **TypeScript**, **Tailwind CSS v4**, **Radix UI**, **Recharts**, and **@dnd-kit**.
 
 ---
 
