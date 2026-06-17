@@ -1,0 +1,185 @@
+name: PR AI Docs
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+  models: read
+
+jobs:
+  generate-pr-docs:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Collect PR file changes
+        id: changes
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              per_page: 100
+            });
+
+            const compact = files.map((f) => ({
+              filename: f.filename,
+              status: f.status,
+              additions: f.additions,
+              deletions: f.deletions,
+              patch: (f.patch || "").slice(0, 6000)
+            }));
+
+            const totalAdditions = compact.reduce((sum, f) => sum + f.additions, 0);
+            const totalDeletions = compact.reduce((sum, f) => sum + f.deletions, 0);
+
+            core.setOutput("changes_json", JSON.stringify(compact));
+            core.setOutput("stats", JSON.stringify({
+              fileCount: compact.length,
+              additions: totalAdditions,
+              deletions: totalDeletions
+            }));
+
+      - name: Generate PR description and changelog with AI
+        id: ai
+        uses: actions/github-script@v8
+        env:
+          CHANGES_JSON: ${{ steps.changes.outputs.changes_json }}
+          STATS_JSON: ${{ steps.changes.outputs.stats }}
+          AI_MODEL: gpt-4.1-mini
+          AI_ENDPOINT: https://models.inference.ai.azure.com/chat/completions
+        with:
+          script: |
+            const changes = JSON.parse(process.env.CHANGES_JSON || "[]");
+            const stats = JSON.parse(process.env.STATS_JSON || "{}");
+
+            const fallbackDescription = [
+              "## Summary",
+              `- Updated ${stats.fileCount || 0} file(s)`,
+              `- Additions: ${stats.additions || 0}`,
+              `- Deletions: ${stats.deletions || 0}`,
+              "",
+              "## Changed Files",
+              ...changes.slice(0, 25).map((f) => `- ${f.filename} (${f.status}, +${f.additions}/-${f.deletions})`)
+            ].join("\n");
+
+            const fallbackChangelog = [
+              "# PR Changelog",
+              "",
+              "## Files",
+              ...changes.slice(0, 50).map((f) => `- ${f.filename}: ${f.status} (+${f.additions}/-${f.deletions})`)
+            ].join("\n");
+
+            const prompt = [
+              "You are GitHub Copilot generating pull request documentation.",
+              "Return STRICT JSON only with keys: pr_description, changelog.",
+              "Requirements:",
+              "- pr_description must be Markdown with sections: Summary, What Changed, Risks, Testing.",
+              "- changelog must be Markdown suitable for a CHANGELOG_PR.md file.",
+              "- Keep concise and technical.",
+              "",
+              "PR title:",
+              context.payload.pull_request.title,
+              "",
+              "PR body:",
+              context.payload.pull_request.body || "",
+              "",
+              "Stats:",
+              JSON.stringify(stats),
+              "",
+              "Changed files and patches:",
+              JSON.stringify(changes)
+            ].join("\n");
+
+            let prDescription = fallbackDescription;
+            let changelog = fallbackChangelog;
+
+            try {
+              const response = await fetch(process.env.AI_ENDPOINT, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${process.env.GITHUB_TOKEN}`
+                },
+                body: JSON.stringify({
+                  model: process.env.AI_MODEL,
+                  messages: [
+                    { role: "system", content: "You are GitHub Copilot." },
+                    { role: "user", content: prompt }
+                  ],
+                  temperature: 0.2,
+                  response_format: {
+                    type: "json_object"
+                  }
+                })
+              });
+
+              if (!response.ok) {
+                throw new Error(`AI request failed with status ${response.status}`);
+              }
+
+              const data = await response.json();
+              const content = data?.choices?.[0]?.message?.content;
+              const parsed = JSON.parse(content);
+
+              if (parsed?.pr_description) {
+                prDescription = parsed.pr_description;
+              }
+              if (parsed?.changelog) {
+                changelog = parsed.changelog;
+              }
+            } catch (error) {
+              core.warning(`AI generation failed, using fallback: ${error.message}`);
+            }
+
+            core.setOutput("pr_description", prDescription);
+            core.setOutput("changelog", changelog);
+
+      - name: Update PR description
+        uses: actions/github-script@v8
+        env:
+          PR_DESCRIPTION: ${{ steps.ai.outputs.pr_description }}
+        with:
+          script: |
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              body: process.env.PR_DESCRIPTION
+            });
+
+      - name: Write changelog file
+        run: |
+          cat > CHANGELOG_PR.md << 'EOF'
+          # Changelog for PR #${{ github.event.pull_request.number }}
+
+          ${{ steps.ai.outputs.changelog }}
+          EOF
+
+      - name: Commit and push changelog
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add CHANGELOG_PR.md
+
+          if git diff --cached --quiet; then
+            echo "No changelog changes to commit"
+            exit 0
+          fi
+
+          git commit -m "chore: update PR changelog #${{ github.event.pull_request.number }}"
+          git push
