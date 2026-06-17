@@ -78,7 +78,7 @@ jobs:
                   changeType,
                   additions: f.additions,
                   deletions: f.deletions,
-                  patch: patch.slice(0, 10000),
+                  patch: patch.slice(0, 15000),
                   summary: {
                     isConfigFile,
                     hasImportChanges,
@@ -128,7 +128,7 @@ jobs:
           CHANGES_JSON: ${{ steps.changes.outputs.changes_json }}
           CATEGORIZED_JSON: ${{ steps.changes.outputs.categorized_json }}
           STATS_JSON: ${{ steps.changes.outputs.stats }}
-          AI_MODEL: gpt-4.1-mini
+          AI_MODEL: gpt-4o
           AI_ENDPOINT: https://models.inference.ai.azure.com/chat/completions
         with:
           script: |
@@ -316,85 +316,94 @@ jobs:
 
             const diffContent = changes.map((file, index) => {
               return `FILE ${index + 1}: ${file.filename}
-            STATUS: ${file.status}
-            STATS: +${file.additions}/-${file.deletions}
-            CONTENT:
-            ${file.patch}
-            ---`;
+STATUS: ${file.status}
+STATS: +${file.additions}/-${file.deletions}
+PATCH:
+${file.patch}
+---`;
             }).join("\n\n");
 
-            const prompt = `You are a senior software engineer expert at analyzing GitHub Pull Requests and writing developer-friendly technical documentation.
+            const prompt = `You are an expert code reviewer and technical writer. Your job is to analyze code changes and explain them in simple, concrete terms that developers can immediately understand.
 
-            Return ONLY valid JSON with exactly these keys:
-            {
-              "pr_description": "markdown content",
-              "changelog": "markdown content"
-            }
+CRITICAL: Look at the actual code changes in the diff and describe EXACTLY what was changed. Be specific and concrete.
 
-            === PR CONTEXT ===
-            Title: ${context.payload.pull_request.title}
-            Body: ${context.payload.pull_request.body || "(no description)"}
+EXAMPLE of good explanation:
+- "Modified button color from blue (#007bff) to green (#28a745) in the login form"
+- "Added validation to email field that now checks for @ symbol"
+- "Removed console.log statements from API calls to reduce noise"
+- "Updated font size from 14px to 16px for better readability"
 
-            Stats:
-            - Total Files: ${stats.fileCount}
-            - Total Additions: ${stats.additions}
-            - Total Deletions: ${stats.deletions}
-            - Frontend Files: ${stats.frontendFiles}
-            - Backend Files: ${stats.backendFiles}
-            - Config Files: ${stats.configFiles}
-            - Test Files: ${stats.testFiles}
+Return ONLY valid JSON with these keys:
+{
+  "pr_description": "markdown",
+  "changelog": "markdown"
+}
 
-            === ACTUAL DIFF CONTENT TO ANALYZE ===
-            ${diffContent}
+=== PR CONTEXT ===
+Title: ${context.payload.pull_request.title}
+Body: ${context.payload.pull_request.body || "(no description)"}
 
-            === PR DESCRIPTION FORMAT ===
-            ## Summary
-            Write 2-4 clear sentences explaining the purpose of this PR.
+Stats:
+- Files: ${stats.fileCount}
+- +${stats.additions}/-${stats.deletions} lines
+- Frontend: ${stats.frontendFiles}, Backend: ${stats.backendFiles}, Config: ${stats.configFiles}, Tests: ${stats.testFiles}
 
-            ## What Changed
-            Group changes by area. Explain what changed and why it matters.
+=== ACTUAL CODE CHANGES ===
+${diffContent}
 
-            ## Technical Details
-            Mention specific functions, components, files, APIs, refactoring, dependencies, or configuration changes.
+=== PR DESCRIPTION FORMAT ===
+Write in simple, concrete language. Every change should be specific.
 
-            ## Testing
-            Mention automated tests if present. Suggest specific manual test scenarios.
+## Summary
+1-2 clear sentences about what this PR does. Use concrete examples.
+Example: "This PR improves the login page by changing the submit button color from blue to green and adding email validation."
 
-            ## Risks and Review Notes
-            Mention possible risks, edge cases, breaking changes, or "No major risks identified".
+## What Changed
+List specific changes with details:
+- "Changed button color from #007bff to #28a745 in components/LoginForm.tsx"
+- "Added email @ symbol validation in utils/validators.ts"
+- "Updated font size in sidebar from 14px to 16px"
 
-            === CHANGELOG FORMAT ===
-            IMPORTANT:
-            The changelog must be only the entry content for this PR.
-            Do NOT include "# Changelog".
-            Do NOT include the PR number, title, author, date, or separator.
-            Do NOT invent changes.
-            Make it human-readable and useful for developers.
+## Technical Details
+- What functions/components were modified?
+- What was added or removed?
+- Any important logic changes?
 
-            Use this exact structure:
+## Testing
+- What should be tested?
+- Provide specific test scenarios.
 
-            ### Added
-            - New files, functions, components, or features.
+## Risks and Review Notes
+- Any breaking changes?
+- Performance impact?
+- Edge cases to consider?
 
-            ### Changed
-            - Modified behavior, refactoring, UI updates, or logic changes.
+=== CHANGELOG FORMAT ===
+Structure (no PR title/number/author/date - just content):
 
-            ### Fixed
-            - Bug fixes if clearly visible in the diff.
+### Added
+- New functions, components, or features added (with specific names).
 
-            ### Technical
-            - Internal changes, tests, dependency updates, CI/CD changes, configuration changes.
+### Changed
+- Specific modifications (colors, sizes, logic, dependencies).
+Example: "Changed primary button color from blue to green in all components"
 
-            ### Notes
-            - Important review notes, risks, testing notes, or breaking changes.
+### Fixed
+- Bug fixes (if visible in diff).
 
-            === CRITICAL RULES ===
-            1. Analyze the actual diff content, not only file names.
-            2. Mention real function, component, class, or file names when visible.
-            3. Explain why changes matter.
-            4. Do not invent changes.
-            5. Keep it concise but useful for code reviewers.
-            6. Return only valid JSON.`;
+### Technical
+- Configuration, tests, dependencies.
+
+### Notes
+- Important information for reviewers.
+
+=== CRITICAL RULES ===
+1. ANALYZE THE ACTUAL DIFF - not just file names.
+2. BE SPECIFIC - mention exact values (colors, sizes, names, functions).
+3. BE CONCRETE - use examples developers can understand immediately.
+4. DON'T INVENT - only describe what you see in the code.
+5. KEEP IT SHORT - but useful.
+6. RETURN ONLY VALID JSON.`;
 
             try {
               const response = await fetch(process.env.AI_ENDPOINT, {
@@ -408,15 +417,15 @@ jobs:
                   messages: [
                     {
                       role: "system",
-                      content: "You are GitHub Copilot, an expert code reviewer and technical documentation writer. Always return valid JSON."
+                      content: "You are an expert code reviewer. Analyze diffs and explain code changes in simple, concrete, specific terms. Always return valid JSON."
                     },
                     {
                       role: "user",
                       content: prompt
                     }
                   ],
-                  temperature: 0.4,
-                  max_tokens: 3000,
+                  temperature: 0.3,
+                  max_tokens: 3500,
                   response_format: {
                     type: "json_object"
                   }
@@ -489,15 +498,15 @@ jobs:
             const endMarker = `<!-- PR-${prNumber}-CHANGELOG-END -->`;
 
             const newEntry = `${startMarker}
-            ## PR #${prNumber} - ${prTitle}
+## PR #${prNumber} - ${prTitle}
 
-            **Author:** @${prAuthor}  
-            **Date:** ${date}
+**Author:** @${prAuthor}  
+**Date:** ${date}
 
-            ${newChangelog}
+${newChangelog}
 
-            ---
-            ${endMarker}`;
+---
+${endMarker}`;
 
             let changelog = "";
 
@@ -508,9 +517,9 @@ jobs:
             if (!changelog) {
               changelog = `# Changelog
 
-            All notable changes to this project will be documented in this file.
+All notable changes to this project will be documented in this file.
 
-            ---`;
+---`;
             }
 
             const existingEntryRegex = new RegExp(`${startMarker}[\\s\\S]*?${endMarker}`, "m");
