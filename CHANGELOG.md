@@ -4,7 +4,7 @@
 ## PR #20 - feat(dashboard): add date-range filter wired to URL params and charts
 
 **Author:** @mrcdiana  
-**Date:** 2026-06-17 11:17:49 UTC
+**Date:** 2026-06-17 11:20:12 UTC
 
 ### Added
 - Added `components/dashboard/date-range-filter.tsx`.
