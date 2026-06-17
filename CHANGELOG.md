@@ -1,5 +1,26 @@
 # Changelog
 
+<!-- PR-25-CHANGELOG-START -->
+## PR #25 - Update pr-ai-docs.yaml
+
+**Author:** @rbl-dianadobocan
+**Date:** 2026-06-17
+
+### Added
+- Added a comment (`#pprprprprprpr`) at the top of the `.github/workflows/pr-ai-docs.yaml` file.
+
+### Changed
+- Restored the newline at the end of the workflow YAML file for improved formatting.
+
+### Testing
+- No automated or manual testing required, as the workflow logic was not changed.
+
+### Review Notes
+- Confirm that the YAML file remains valid and that the comment does not affect workflow execution.
+
+---
+<!-- PR-25-CHANGELOG-END -->
+
 <!-- PR-23-CHANGELOG-START -->
 ## PR #23 - Date range filter
 
