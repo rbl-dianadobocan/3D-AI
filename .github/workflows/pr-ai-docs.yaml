@@ -137,9 +137,7 @@ jobs:
 
             const generateDetailedFallback = () => {
               const sections = ["## Summary"];
-
               sections.push(`This PR contains **${stats.fileCount} file changes** with **${stats.additions} additions** and **${stats.deletions} deletions**.`);
-
               if (stats.frontendFiles > 0) sections.push(`- **Frontend**: ${stats.frontendFiles} file(s) modified`);
               if (stats.backendFiles > 0) sections.push(`- **Backend**: ${stats.backendFiles} file(s) modified`);
               if (stats.configFiles > 0) sections.push(`- **Configuration**: ${stats.configFiles} file(s) modified`);
@@ -175,34 +173,28 @@ jobs:
               sections.push("");
               sections.push("## Technical Details");
               sections.push("- Review the diff details for implementation specifics.");
-
               if (changes.some((file) => file.summary.hasImportChanges)) {
                 sections.push("- Imports or dependencies were updated.");
               }
-
               if (categorized.config?.length > 0) {
                 sections.push("- Configuration files were modified. Verify environment-specific behavior.");
               }
-
               if (stats.testFiles > 0) {
                 sections.push(`- Test files updated: ${stats.testFiles}.`);
               }
 
               sections.push("");
               sections.push("## Testing");
-
               if (stats.testFiles > 0) {
                 sections.push(`- Automated test files are included in this PR.`);
                 sections.push("- Run the existing test suite before merging.");
               } else {
                 sections.push("- No automated test files were detected in this diff.");
               }
-
               sections.push("- Manual validation is recommended for all changed flows.");
 
               sections.push("");
               sections.push("## Risks and Review Notes");
-
               const risks = [];
               if (stats.deletions > stats.additions * 2) {
                 risks.push("- Large number of deletions. Verify removed code is no longer needed.");
@@ -216,7 +208,6 @@ jobs:
               if (risks.length === 0) {
                 risks.push("- No major risks identified. Standard code review recommended.");
               }
-
               sections.push(...risks);
               return sections.join("\n");
             };
@@ -227,13 +218,11 @@ jobs:
               const addedItems = changes
                 .filter((file) => file.status === "added")
                 .map((file) => `- Added \`${file.filename}\`.`);
-
               const newFunctions = changes
                 .flatMap((file) =>
                   file.summary.addedFunctions.map((fn) => `- Added \`${fn}\` in \`${file.filename}\`.`)
                 )
                 .slice(0, 10);
-
               if (addedItems.length > 0 || newFunctions.length > 0) {
                 sections.push(...addedItems);
                 sections.push(...newFunctions);
@@ -243,7 +232,6 @@ jobs:
 
               sections.push("");
               sections.push("### Changed");
-
               const changedItems = changes
                 .filter((file) => file.status === "modified")
                 .map((file) => {
@@ -254,7 +242,6 @@ jobs:
                   detail += ` (+${file.additions}/-${file.deletions}).`;
                   return detail;
                 });
-
               if (changedItems.length > 0) {
                 sections.push(...changedItems);
               } else {
@@ -267,7 +254,6 @@ jobs:
 
               sections.push("");
               sections.push("### Technical");
-
               const technical = [];
               if (categorized.config?.length > 0) {
                 technical.push(`- Updated configuration-related files: ${categorized.config.map((file) => `\`${file.filename}\``).join(", ")}.`);
@@ -278,7 +264,6 @@ jobs:
               if (stats.testFiles > 0) {
                 technical.push(`- Updated test files: ${stats.testFiles}.`);
               }
-
               if (technical.length > 0) {
                 sections.push(...technical);
               } else {
@@ -305,28 +290,22 @@ jobs:
 
             const prompt = `You are an expert code reviewer. Analyze code changes and explain them in simple, concrete terms.
 
-EXAMPLES of good explanations:
-- "Changed button color from blue (#007bff) to green (#28a745) in the login form"
+EXAMPLES:
+- "Changed button color from blue (#007bff) to green (#28a745)"
 - "Added email validation to check for @ symbol"
-- "Removed console.log statements from API calls"
+- "Removed console.log statements"
 - "Updated font size from 14px to 16px"
 
 Return ONLY valid JSON:
 {"pr_description": "markdown", "changelog": "markdown"}
 
-PR Title: ${context.payload.pull_request.title}
-PR Body: ${context.payload.pull_request.body || ""}
-
+PR: ${context.payload.pull_request.title}
 Files: ${stats.fileCount}, +${stats.additions}/-${stats.deletions}
 
 DIFF:
 ${diffContent}
 
-Analyze this diff and describe:
-1. pr_description: What changed and why (specific examples)
-2. changelog: Changes in Added/Changed/Fixed/Technical/Notes
-
-Be specific, mention exact values, be concrete.`;
+Analyze and provide specific descriptions.`;
 
             try {
               const response = await fetch(process.env.AI_ENDPOINT, {
@@ -340,7 +319,7 @@ Be specific, mention exact values, be concrete.`;
                   messages: [
                     {
                       role: "system",
-                      content: "You are GitHub Copilot. Analyze code diffs and return valid JSON only."
+                      content: "You are GitHub Copilot. Analyze diffs and return valid JSON."
                     },
                     {
                       role: "user",
@@ -349,21 +328,16 @@ Be specific, mention exact values, be concrete.`;
                   ],
                   temperature: 0.3,
                   max_tokens: 3500,
-                  response_format: {
-                    type: "json_object"
-                  }
+                  response_format: { type: "json_object" }
                 })
               });
 
               if (!response.ok) {
-                const errorText = await response.text();
-                core.warning(`AI request failed: ${response.status}`);
-                throw new Error(`AI request failed with status ${response.status}`);
+                throw new Error(`AI failed: ${response.status}`);
               }
 
               const data = await response.json();
               const content = data?.choices?.[0]?.message?.content;
-
               if (content) {
                 const parsed = JSON.parse(content);
                 if (parsed?.pr_description && parsed.pr_description.trim().length > 100) {
@@ -374,7 +348,7 @@ Be specific, mention exact values, be concrete.`;
                 }
               }
             } catch (error) {
-              core.warning(`AI generation failed: ${error.message}`);
+              core.warning(`AI failed: ${error.message}`);
             }
 
             core.setOutput("pr_description", prDescription);
@@ -403,49 +377,29 @@ Be specific, mention exact values, be concrete.`;
         with:
           script: |
             const fs = require("fs");
-
             const changelogPath = "CHANGELOG.md";
             const prNumber = process.env.PR_NUMBER;
             const prTitle = process.env.PR_TITLE;
             const prAuthor = process.env.PR_AUTHOR;
             const newChangelog = (process.env.NEW_CHANGELOG || "").trim();
-            const date = new Date().toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
-
+            const date = new Date().toISOString().split("T")[0];
             const startMarker = `<!-- PR-${prNumber}-CHANGELOG-START -->`;
             const endMarker = `<!-- PR-${prNumber}-CHANGELOG-END -->`;
-
-            const newEntry = `${startMarker}
-## PR #${prNumber} - ${prTitle}
-
-**Author:** @${prAuthor}  
-**Date:** ${date}
-
-${newChangelog}
-
----
-${endMarker}`;
+            const newEntry = `${startMarker}\n## PR #${prNumber} - ${prTitle}\n\n**Author:** @${prAuthor}\n**Date:** ${date}\n\n${newChangelog}\n\n---\n${endMarker}`;
 
             let changelog = "";
-
             if (fs.existsSync(changelogPath)) {
               changelog = fs.readFileSync(changelogPath, "utf8").trim();
             }
-
             if (!changelog) {
-              changelog = `# Changelog
-
-All notable changes to this project will be documented in this file.
-
----`;
+              changelog = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\n---";
             }
 
             const existingEntryRegex = new RegExp(`${startMarker}[\\s\\S]*?${endMarker}`, "m");
-
             if (existingEntryRegex.test(changelog)) {
               changelog = changelog.replace(existingEntryRegex, newEntry);
             } else {
               const titleRegex = /^# Changelog\s*\n*/;
-
               if (titleRegex.test(changelog)) {
                 changelog = changelog.replace(titleRegex, `# Changelog\n\n${newEntry}\n\n`);
               } else {
@@ -456,12 +410,13 @@ All notable changes to this project will be documented in this file.
             fs.writeFileSync(changelogPath, `${changelog.trim()}\n`);
 
       - name: Commit and push CHANGELOG
+        if: github.event.pull_request.head.repo.full_name == github.repository
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
           if git diff --cached --quiet; then
-            echo "No changelog changes"
+            echo "No changes"
             exit 0
           fi
           git commit -m "docs: update CHANGELOG.md for PR #${{ github.event.pull_request.number }}"
@@ -472,12 +427,7 @@ All notable changes to this project will be documented in this file.
         uses: actions/github-script@v8
         with:
           script: |
-            const summary = `✨ **PR Analysis Complete**
-- **Files**: ${{ fromJson(steps.changes.outputs.stats).fileCount }}
-- **Changes**: +${{ fromJson(steps.changes.outputs.stats).additions }}/-${{ fromJson(steps.changes.outputs.stats).deletions }}
-- **Changelog**: Updated
-
-See description above for details.`;
+            const summary = `✨ **PR Analysis Complete**\n- **Files**: ${{ fromJson(steps.changes.outputs.stats).fileCount }}\n- **Changes**: +${{ fromJson(steps.changes.outputs.stats).additions }}/-${{ fromJson(steps.changes.outputs.stats).deletions }}\n- **Changelog**: Updated\n\nSee description for details.`;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
