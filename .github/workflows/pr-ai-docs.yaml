@@ -34,22 +34,18 @@ jobs:
               per_page: 100
             });
 
-            // Extract detailed information from diffs
             const analyzedFiles = files.map((f) => {
               const patch = f.patch || "";
               const lines = patch.split('\n');
               
-              // Detect change types based on content
               let changeType = 'modified';
               if (f.status === 'added') changeType = 'added';
               else if (f.status === 'removed') changeType = 'deleted';
               else if (f.status === 'renamed') changeType = 'renamed';
               
-              // Extract meaningful context from patch
               const addedLines = lines.filter(l => l.startsWith('+')).map(l => l.slice(1));
               const removedLines = lines.filter(l => l.startsWith('-')).map(l => l.slice(1));
               
-              // Detect what was changed (function names, imports, config, etc.)
               const functionPattern = /^[\s]*(async\s+)?(function|const|let|class|export|interface|type)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/;
               const importPattern = /^[\s]*(import|require)\s+/;
               const configPattern = /\.(json|yaml|yml|toml|config|env|properties)$/i;
@@ -85,7 +81,6 @@ jobs:
             const totalAdditions = analyzedFiles.reduce((sum, f) => sum + f.additions, 0);
             const totalDeletions = analyzedFiles.reduce((sum, f) => sum + f.deletions, 0);
             
-            // Categorize files by type
             const categorized = {
               frontend: analyzedFiles.filter(f => /\.(tsx?|jsx?)$/i.test(f.filename) && !/test|spec/.test(f.filename)),
               styling: analyzedFiles.filter(f => /\.(css|scss|sass|less)$/i.test(f.filename)),
@@ -123,7 +118,6 @@ jobs:
             const categorized = JSON.parse(process.env.CATEGORIZED_JSON || "{}");
             const stats = JSON.parse(process.env.STATS_JSON || "{}");
 
-            // Enhanced fallback with detailed information
             const generateDetailedFallback = () => {
               const sections = ["## Summary"];
               
@@ -138,7 +132,6 @@ jobs:
               sections.push("");
               sections.push("## What Changed");
               
-              // Group changes by category
               if (categorized.frontend?.length > 0) {
                 sections.push("### Frontend Components");
                 categorized.frontend.slice(0, 10).forEach(f => {
@@ -315,113 +308,29 @@ jobs:
             let prDescription = generateDetailedFallback();
             let changelog = generateDetailedChangelog();
 
-            // Build comprehensive diff content for AI
             const diffContent = changes.map((f, idx) => {
-              return `FILE ${idx + 1}: ${f.filename}
-STATUS: ${f.status}
-STATS: +${f.additions}/-${f.deletions}
-CONTENT:
-${f.patch}
----`;
+              return `FILE ${idx + 1}: ${f.filename}\nSTATUS: ${f.status}\nSTATS: +${f.additions}/-${f.deletions}\nCONTENT:\n${f.patch}\n---`;
             }).join('\n\n');
 
-            // Prepare ENHANCED prompt for AI analysis
-            const prompt = `You are a senior software engineer expert at analyzing GitHub Pull Requests and writing technical documentation.
+            const prompt = `You are a senior software engineer analyzing GitHub Pull Requests.
+Analyze the ACTUAL DIFF CONTENT and provide detailed technical documentation.
 
-CRITICAL INSTRUCTION: You MUST analyze the ACTUAL DIFF CONTENT below, not just file names or statistics.
-Extract specific changes, functions, logic modifications, and their impact.
-Provide detailed, actionable analysis that helps reviewers understand exactly what changed and why.
+Return ONLY valid JSON:
+{"pr_description": "markdown", "changelog": "markdown"}
 
-Return ONLY valid JSON with exactly these keys (no markdown formatting outside JSON):
-{
-  "pr_description": "markdown content",
-  "changelog": "markdown content"
-}
+PR Title: ${context.payload.pull_request.title}
+PR Body: ${context.payload.pull_request.body || ""}
 
-=== PR CONTEXT ===
-Title: ${context.payload.pull_request.title}
-Body: ${context.payload.pull_request.body || "(no description)"}
+Files: ${stats.fileCount}, +${stats.additions}/-${stats.deletions}
 
-Stats:
-- Total Files: ${stats.fileCount}
-- Total Additions: ${stats.additions}
-- Total Deletions: ${stats.deletions}
-- Frontend Files: ${stats.frontendFiles}
-- Backend Files: ${stats.backendFiles}
-- Config Files: ${stats.configFiles}
-- Test Files: ${stats.testFiles}
-
-=== ACTUAL DIFF CONTENT TO ANALYZE ===
+DIFF:
 ${diffContent}
 
-=== INSTRUCTIONS FOR PR DESCRIPTION ===
-Structure your pr_description with these sections (markdown format):
+Analyze this diff and provide:
+1. pr_description: Clear explanation of what changed and why
+2. changelog: Organized changelog entries (Added/Changed/Fixed/Technical/Notes)
 
-## Summary
-- Write 2-4 sentences explaining the PURPOSE of this PR
-- What problem does it solve? What improvement does it introduce?
-- Which part of the application is affected?
-
-## What Changed
-- List changes organized by category (Frontend/Backend/Config/Tests)
-- For EACH change, explain WHAT was modified and WHY it matters
-- Example: "Updated navigation component to use new routing hooks - improves performance and maintainability"
-- Include specific function/component names when relevant
-- Mention dependency updates if present
-
-## Technical Details
-- Extract specific implementation details from the diff
-- What new functions, components, or APIs were added?
-- What existing logic was changed?
-- Any important refactoring or optimization?
-- Configuration changes and their impact?
-
-## Testing
-- Based on the diff, what testing is needed?
-- If test files are included, mention them specifically
-- Suggest specific manual test scenarios
-- Example: "Test user login flow with new auth middleware"
-
-## Risks and Review Notes
-- Identify potential risks or edge cases from the diff
-- Performance implications?
-- Breaking changes?
-- Dependencies on other systems?
-- If no risks: "No major risks identified"
-
-=== INSTRUCTIONS FOR CHANGELOG ===
-Structure your changelog with these sections:
-
-# Changelog
-
-## Added
-- New files, functions, components, or features added
-- Use specific names from the diff
-
-## Changed
-- Modified behavior, refactored code, updated UI
-- Be specific about what changed and how
-
-## Fixed
-- Bug fixes with specific descriptions
-
-## Technical
-- Internal changes, dependency updates, CI/CD changes
-- Configuration file modifications
-
-## Notes
-- Anything reviewers should know
-- Breaking changes or important considerations
-
-=== CRITICAL RULES ===
-1. Analyze the DIFF CONTENT, not just file metadata
-2. Be SPECIFIC - mention actual function/component names from diff
-3. Explain WHY changes matter, not just WHAT changed
-4. Extract meaningful technical details from the code
-5. Do NOT invent changes - only describe what you see in diff
-6. Make it useful for code reviewers
-7. Return ONLY JSON, no markdown outside the JSON structure
-8. Keep explanations concise but informative`;
+Be specific, mention actual function/component names, explain impact.`;
 
             try {
               const response = await fetch(process.env.AI_ENDPOINT, {
@@ -435,7 +344,7 @@ Structure your changelog with these sections:
                   messages: [
                     {
                       role: "system",
-                      content: "You are GitHub Copilot, an expert code reviewer and technical documentation writer. Analyze diffs carefully and provide detailed, actionable analysis. Always return valid JSON as requested."
+                      content: "You are GitHub Copilot. Analyze code diffs and return valid JSON only."
                     },
                     {
                       role: "user",
@@ -451,8 +360,6 @@ Structure your changelog with these sections:
               });
 
               if (!response.ok) {
-                const errorText = await response.text();
-                core.warning(`AI request failed with status ${response.status}: ${errorText}`);
                 throw new Error(`AI request failed with status ${response.status}`);
               }
 
@@ -465,20 +372,17 @@ Structure your changelog with these sections:
                   
                   if (parsed?.pr_description && parsed.pr_description.trim().length > 100) {
                     prDescription = parsed.pr_description;
-                    core.info("✓ AI analysis successful - detailed PR description generated");
                   }
                   
                   if (parsed?.changelog && parsed.changelog.trim().length > 50) {
                     changelog = parsed.changelog;
-                    core.info("✓ AI changelog generated");
                   }
-                } catch (parseError) {
-                  core.warning(`Failed to parse AI response: ${parseError.message}`);
+                } catch (e) {
+                  core.warning(`Failed to parse AI response: ${e.message}`);
                 }
               }
             } catch (error) {
-              core.warning(`AI generation failed, using enhanced fallback: ${error.message}`);
-              core.info("ℹ️ Fallback provides detailed analysis from file changes and diff content");
+              core.warning(`AI generation failed: ${error.message}`);
             }
 
             core.setOutput("pr_description", prDescription);
@@ -490,71 +394,56 @@ Structure your changelog with these sections:
           PR_DESCRIPTION: ${{ steps.ai.outputs.pr_description }}
         with:
           script: |
-            const body = process.env.PR_DESCRIPTION;
-            
             await github.rest.pulls.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.issue.number,
-              body: body
+              body: process.env.PR_DESCRIPTION
             });
-            
-            core.info("✓ PR description updated with detailed analysis");
 
-      - name: Checkout main branch to update CHANGELOG.md
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
 
-      - name: Update CHANGELOG.md with PR entry
-        id: update_changelog
-        uses: actions/github-script@v8
-        env:
-          NEW_CHANGELOG: ${{ steps.ai.outputs.changelog }}
-        with:
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-            
-            const prNumber = context.payload.pull_request.number;
-            const prTitle = context.payload.pull_request.title;
-            const prAuthor = context.payload.pull_request.user.login;
-            const timestamp = new Date().toISOString().split('T')[0];
-            const newChangelog = process.env.NEW_CHANGELOG;
-            
-            const changelogPath = 'CHANGELOG.md';
-            let existingContent = '';
-            
-            // Read existing CHANGELOG.md
-            if (fs.existsSync(changelogPath)) {
-              existingContent = fs.readFileSync(changelogPath, 'utf8');
-            } else {
-              existingContent = '# Changelog\n\nAll notable changes to this project will be documented in this file.\n\n---\n';
-            }
-            
-            // Create PR entry
-            const prEntry = `## PR #${prNumber} - ${prTitle}
-**Author**: @${prAuthor}  
-**Date**: ${timestamp}
+      - name: Update CHANGELOG.md
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+          PR_DATE=$(date -u +'%Y-%m-%d')
+          NEW_CHANGELOG="${{ steps.ai.outputs.changelog }}"
+          
+          # Create temp file with new entry
+          cat > /tmp/new_entry.md << 'ENTRY'
+          ## PR #${PR_NUMBER} - ${PR_TITLE}
+          **Author**: @${PR_AUTHOR}  
+          **Date**: ${PR_DATE}
+          
+          ${NEW_CHANGELOG}
+          
+          ---
+          
+          ENTRY
+          
+          # Check if CHANGELOG.md exists
+          if [ -f CHANGELOG.md ]; then
+            # Prepend new entry to existing changelog
+            cat /tmp/new_entry.md CHANGELOG.md > CHANGELOG.md.tmp
+            mv CHANGELOG.md.tmp CHANGELOG.md
+          else
+            # Create new changelog with header
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "All notable changes to this project will be documented in this file." >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "---" >> CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            cat /tmp/new_entry.md >> CHANGELOG.md
+          fi
 
-${newChangelog}
-
----
-
-`;
-            
-            // Combine new entry with existing content
-            const updatedContent = prEntry + existingContent;
-            
-            // Write back to file
-            fs.writeFileSync(changelogPath, updatedContent, 'utf8');
-            
-            core.setOutput('changelog_updated', 'true');
-            core.info('✓ CHANGELOG.md updated successfully');
-
-      - name: Commit and push CHANGELOG.md to main
-        if: steps.update_changelog.outputs.changelog_updated == 'true'
+      - name: Commit and push CHANGELOG
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -562,32 +451,9 @@ ${newChangelog}
           git add CHANGELOG.md
           
           if git diff --cached --quiet; then
-            echo "ℹ️ No changelog changes to commit"
+            echo "No changes to commit"
             exit 0
           fi
           
-          git commit -m "chore: update CHANGELOG.md - PR #${{ github.event.pull_request.number }}"
+          git commit -m "chore: update CHANGELOG.md for PR #${{ github.event.pull_request.number }}"
           git push origin main
-          
-          echo "✓ CHANGELOG.md updated and pushed to main"
-
-      - name: Comment on PR with status
-        if: always()
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const stats = ${{ steps.changes.outputs.stats }};
-            const summary = `✨ **Automated PR Analysis Complete**
-
-- **Files analyzed**: ${stats.fileCount}
-- **Lines changed**: +${stats.additions}/-${stats.deletions}
-- **Changelog**: Updated in main branch (CHANGELOG.md)
-
-👆 See the PR description above for detailed analysis.`;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: summary
-            }).catch(err => core.warning("Could not post comment: " + err.message));
