@@ -1,0 +1,172 @@
+Create a complete GitHub Actions workflow that automatically generates Pull Request documentation using AI.
+
+Requirements:
+
+1. Trigger
+- Run on pull_request events:
+  - opened
+  - synchronize
+  - reopened
+  - ready_for_review
+- Do not run for draft PRs.
+
+2. PR Analysis
+- Collect all changed files from the PR using GitHub API.
+- Exclude CHANGELOG.md from analysis.
+- Retrieve:
+  - filename
+  - status
+  - additions
+  - deletions
+  - patch/diff content
+- Build statistics:
+  - total files changed
+  - total additions
+  - total deletions
+  - frontend files
+  - backend files
+  - config files
+  - test files
+  - style files
+
+3. AI Documentation Generation
+- Use GitHub Models endpoint:
+  https://models.github.ai/inference/chat/completions
+- Use model:
+  openai/gpt-4.1
+
+- Send the actual PR diff to the model.
+- The AI must generate:
+  {
+    "pr_description": "...",
+    "changelog": "..."
+  }
+
+4. PR Description Requirements
+
+Generate a detailed human-readable document intended for:
+
+- Developers
+- Reviewers
+- Technical Leads
+- Project Managers
+
+Use exactly these sections:
+
+## Summary
+Explain:
+- what changed
+- why it changed
+- business purpose
+- technical purpose
+
+## What Changed
+Describe changes step by step in natural language.
+
+Group changes by:
+- feature
+- screen
+- component
+- service
+- state management
+- API
+- configuration
+- testing
+
+## Application Impact
+Explain:
+- affected areas
+- user impact
+- developer impact
+
+## Technical Details
+Describe:
+- architecture changes
+- data flow changes
+- state management changes
+- helper functions
+- reusable components
+- filtering logic
+- transformations
+- validations
+
+## Testing
+Provide concrete manual testing steps.
+
+## Risks and Review Notes
+Describe:
+- edge cases
+- regressions
+- risks
+- reviewer focus areas
+
+5. Writing Style
+
+The generated content must:
+- be written in natural English
+- sound like a senior engineer wrote it
+- avoid generic statements
+- avoid simply listing files
+- explain behavior and intent
+- explain business value
+- explain technical impact
+- be understandable by non-developers
+
+6. Changelog Requirements
+
+Generate:
+
+### Added
+### Changed
+### Testing
+### Review Notes
+
+The changelog must be developer-friendly and detailed.
+
+7. Fallback Logic
+
+If the AI request fails:
+- generate a fallback PR description
+- generate a fallback changelog
+- never fail the workflow
+
+8. PR Update
+
+Automatically update the Pull Request description with the generated documentation.
+
+9. CHANGELOG.md Management
+
+Implement changelog preservation logic:
+
+- Maintain full changelog history.
+- Each PR entry must be wrapped with markers:
+
+<!-- PR-123-CHANGELOG-START -->
+...
+<!-- PR-123-CHANGELOG-END -->
+
+- If the workflow runs again for the same PR:
+  replace the existing entry instead of creating duplicates.
+
+- If the PR does not exist in the changelog:
+  insert a new entry at the top.
+
+- Preserve all previous changelog entries.
+
+10. Git Operations
+
+Commit and push CHANGELOG.md automatically back to the PR branch.
+
+11. Final PR Comment
+
+Add a summary comment containing:
+- files changed
+- additions/deletions
+- changelog updated
+
+12. Output
+
+Generate the COMPLETE workflow file.
+
+Return only the final YAML workflow.
+Do not return explanations.
