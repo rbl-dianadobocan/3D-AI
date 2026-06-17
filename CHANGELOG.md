@@ -1,5 +1,31 @@
 # Changelog
 
+<!-- PR-19-CHANGELOG-START -->
+## PR #19 - prv15
+
+**Author:** @andreistancu21  
+**Date:** 2026-06-17 11:15:24 UTC
+
+### Added
+- No new files or public functions detected.
+
+### Changed
+- Updated `.github/workflows/pr-ai-docs.yaml` (+1/-1).
+
+### Fixed
+- No explicit bug fix could be automatically identified from the diff.
+
+### Technical
+- Updated configuration-related files: `.github/workflows/pr-ai-docs.yaml`.
+
+### Notes
+- Total scope: 1 file(s), +1/-1 lines.
+- Configuration impact: 1 file(s).
+- No automated test changes were detected.
+
+---
+<!-- PR-19-CHANGELOG-END -->
+
 <!-- PR-16-CHANGELOG-START -->
 ## PR #16 - prv10
 
