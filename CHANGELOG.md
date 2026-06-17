@@ -1,5 +1,66 @@
 # Changelog
 
+<!-- PR-28-CHANGELOG-START -->
+## PR #28 - Search filters
+
+**Author:** @andreistancu21
+**Date:** 2026-06-17
+
+### Added
+- New `TeamFilters` component for searching and filtering team members by name, role, skill, department, and status.
+- Department and status filter pills with clear visual states.
+- "Clear filters" button to reset all filters.
+- Empty state messaging when no members match filters.
+- Join date display on MemberCard.
+
+### Changed
+- Team dashboard page now uses the `TeamFilters` component instead of static sorting and grid rendering.
+- MemberCard displays department-specific avatar gradients and color-coded badges for department and status.
+- Improved layout for member info, including join date and email.
+
+### Testing
+- Manual testing required for search and filter functionality, filter pill states, clear filters, empty state, and MemberCard display.
+- No automated tests were changed.
+
+### Review Notes
+- Review filtering logic for correctness and edge cases.
+- Check UI responsiveness and accessibility for filter controls and empty state.
+- Confirm MemberCard visual clarity and accessibility.
+- Ensure "Clear filters" resets all filter state.
+
+---
+<!-- PR-28-CHANGELOG-END -->
+
+<!-- PR-26-CHANGELOG-START -->
+## PR #26 - add search/filter controls and richer member card badges
+
+**Author:** @mrcdiana
+**Date:** 2026-06-17
+
+### Added
+- Search and filter controls for team members (by department, status, and text query)
+- New `TeamFilters` component encapsulating filter logic and UI
+- Richer member card badges, including department-specific avatar gradients and join date display
+- Empty state UI for no matching members
+
+### Changed
+- Team dashboard page now renders member grid via `TeamFilters` instead of static sorting
+- MemberCard badges and layout updated for improved clarity and visual distinction
+- Status and department badge variants standardized
+
+### Testing
+- Manual testing required for search, filter, clear filters, and empty state behaviors
+- No automated tests were changed
+
+### Review Notes
+- Review filter logic for correctness and edge cases
+- Check badge rendering and avatar gradients for visual consistency
+- Validate empty state and responsiveness of UI controls
+- Ensure no regressions in member sorting or display
+
+---
+<!-- PR-26-CHANGELOG-END -->
+
 <!-- PR-25-CHANGELOG-START -->
 ## PR #25 - Update pr-ai-docs.yaml
 

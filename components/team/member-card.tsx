@@ -1,4 +1,4 @@
-import { Mail, CheckCircle2, Clock } from "lucide-react";
+import { Mail, CheckCircle2, Clock, CalendarDays } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -7,9 +7,9 @@ import { cn } from "@/lib/utils";
 import type { TeamMember } from "@/lib/mock-data";
 
 const statusConfig = {
-  online: { label: "Online", color: "bg-emerald-400" },
-  away: { label: "Away", color: "bg-amber-400" },
-  offline: { label: "Offline", color: "bg-slate-400" },
+  online: { label: "Online", dot: "bg-emerald-400", badge: "success" as const },
+  away:   { label: "Away",   dot: "bg-amber-400",   badge: "warning" as const },
+  offline:{ label: "Offline",dot: "bg-slate-400",   badge: "secondary" as const },
 };
 
 const departmentColors: Record<string, string> = {
@@ -19,6 +19,15 @@ const departmentColors: Record<string, string> = {
   Product: "success",
   Quality: "purple",
   Data: "info",
+};
+
+const avatarGradients: Record<string, string> = {
+  Engineering: "from-violet-500 to-purple-600",
+  Design: "from-sky-500 to-blue-600",
+  Infrastructure: "from-amber-500 to-orange-600",
+  Product: "from-emerald-500 to-teal-600",
+  Quality: "from-rose-500 to-pink-600",
+  Data: "from-cyan-500 to-blue-600",
 };
 
 interface MemberCardProps {
@@ -33,6 +42,9 @@ export function MemberCard({ member }: MemberCardProps) {
     | "warning"
     | "success"
     | "secondary";
+
+  const avatarGradient =
+    avatarGradients[member.department] ?? "from-violet-500 to-purple-600";
 
   const productivity = member.productivity;
   const productivityColor =
@@ -49,14 +61,19 @@ export function MemberCard({ member }: MemberCardProps) {
         <div className="flex items-start gap-4 mb-4">
           <div className="relative shrink-0">
             <Avatar className="h-12 w-12">
-              <AvatarFallback className="bg-gradient-to-br from-violet-500 to-purple-600 text-white text-sm font-bold">
+              <AvatarFallback
+                className={cn(
+                  "bg-gradient-to-br text-white text-sm font-bold",
+                  avatarGradient
+                )}
+              >
                 {member.avatar}
               </AvatarFallback>
             </Avatar>
             <span
               className={cn(
                 "absolute bottom-0 right-0 h-3 w-3 rounded-full ring-2 ring-card",
-                status.color
+                status.dot
               )}
             />
           </div>
@@ -71,7 +88,7 @@ export function MemberCard({ member }: MemberCardProps) {
               <Badge variant={deptVariant} className="text-[10px]">
                 {member.department}
               </Badge>
-              <Badge variant="outline" className="text-[10px]">
+              <Badge variant={status.badge} className="text-[10px]">
                 {status.label}
               </Badge>
             </div>
@@ -119,10 +136,16 @@ export function MemberCard({ member }: MemberCardProps) {
           ))}
         </div>
 
-        {/* Email */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground border-t border-border pt-3">
-          <Mail className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">{member.email}</span>
+        {/* Join date + Email */}
+        <div className="flex flex-col gap-1.5 border-t border-border pt-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+            <span>Joined {member.joinDate}</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Mail className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">{member.email}</span>
+          </div>
         </div>
       </CardContent>
     </Card>
