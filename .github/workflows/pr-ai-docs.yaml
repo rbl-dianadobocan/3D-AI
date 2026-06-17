@@ -1,6 +1,5 @@
 name: PR AI Docs
-#test
-#test2
+
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -152,20 +151,15 @@ jobs:
 
               const addCategory = (title, files) => {
                 if (!files || files.length === 0) return;
-
                 sections.push(`### ${title}`);
-
                 files.slice(0, 15).forEach((file) => {
                   let detail = `- **${file.filename}** (${file.status})`;
-
                   if (file.summary.addedFunctions.length > 0) {
                     detail += ` - Added: ${file.summary.addedFunctions.join(", ")}`;
                   }
-
                   if (file.summary.hasImportChanges) {
                     detail += " - Imports/dependencies updated";
                   }
-
                   detail += ` (+${file.additions}/-${file.deletions})`;
                   sections.push(detail);
                 });
@@ -210,31 +204,25 @@ jobs:
               sections.push("## Risks and Review Notes");
 
               const risks = [];
-
               if (stats.deletions > stats.additions * 2) {
                 risks.push("- Large number of deletions. Verify removed code is no longer needed.");
               }
-
               if (categorized.config?.length > 0) {
                 risks.push("- Configuration changes may affect runtime behavior.");
               }
-
               if (!stats.testFiles || stats.testFiles === 0) {
                 risks.push("- No test updates detected. Manual testing is important.");
               }
-
               if (risks.length === 0) {
                 risks.push("- No major risks identified. Standard code review recommended.");
               }
 
               sections.push(...risks);
-
               return sections.join("\n");
             };
 
             const generateDetailedChangelog = () => {
               const sections = [];
-
               sections.push("### Added");
               const addedItems = changes
                 .filter((file) => file.status === "added")
@@ -281,15 +269,12 @@ jobs:
               sections.push("### Technical");
 
               const technical = [];
-
               if (categorized.config?.length > 0) {
                 technical.push(`- Updated configuration-related files: ${categorized.config.map((file) => `\`${file.filename}\``).join(", ")}.`);
               }
-
               if (changes.some((file) => file.summary.hasImportChanges)) {
                 technical.push("- Updated imports or dependencies.");
               }
-
               if (stats.testFiles > 0) {
                 technical.push(`- Updated test files: ${stats.testFiles}.`);
               }
@@ -315,95 +300,33 @@ jobs:
             let changelog = generateDetailedChangelog();
 
             const diffContent = changes.map((file, index) => {
-              return `FILE ${index + 1}: ${file.filename}
-STATUS: ${file.status}
-STATS: +${file.additions}/-${file.deletions}
-PATCH:
-${file.patch}
----`;
+              return `FILE ${index + 1}: ${file.filename}\nSTATUS: ${file.status}\nSTATS: +${file.additions}/-${file.deletions}\nPATCH:\n${file.patch}\n---`;
             }).join("\n\n");
 
-            const prompt = `You are an expert code reviewer and technical writer. Your job is to analyze code changes and explain them in simple, concrete terms that developers can immediately understand.
+            const prompt = `You are an expert code reviewer. Analyze code changes and explain them in simple, concrete terms.
 
-CRITICAL: Look at the actual code changes in the diff and describe EXACTLY what was changed. Be specific and concrete.
+EXAMPLES of good explanations:
+- "Changed button color from blue (#007bff) to green (#28a745) in the login form"
+- "Added email validation to check for @ symbol"
+- "Removed console.log statements from API calls"
+- "Updated font size from 14px to 16px"
 
-EXAMPLE of good explanation:
-- "Modified button color from blue (#007bff) to green (#28a745) in the login form"
-- "Added validation to email field that now checks for @ symbol"
-- "Removed console.log statements from API calls to reduce noise"
-- "Updated font size from 14px to 16px for better readability"
+Return ONLY valid JSON:
+{"pr_description": "markdown", "changelog": "markdown"}
 
-Return ONLY valid JSON with these keys:
-{
-  "pr_description": "markdown",
-  "changelog": "markdown"
-}
+PR Title: ${context.payload.pull_request.title}
+PR Body: ${context.payload.pull_request.body || ""}
 
-=== PR CONTEXT ===
-Title: ${context.payload.pull_request.title}
-Body: ${context.payload.pull_request.body || "(no description)"}
+Files: ${stats.fileCount}, +${stats.additions}/-${stats.deletions}
 
-Stats:
-- Files: ${stats.fileCount}
-- +${stats.additions}/-${stats.deletions} lines
-- Frontend: ${stats.frontendFiles}, Backend: ${stats.backendFiles}, Config: ${stats.configFiles}, Tests: ${stats.testFiles}
-
-=== ACTUAL CODE CHANGES ===
+DIFF:
 ${diffContent}
 
-=== PR DESCRIPTION FORMAT ===
-Write in simple, concrete language. Every change should be specific.
+Analyze this diff and describe:
+1. pr_description: What changed and why (specific examples)
+2. changelog: Changes in Added/Changed/Fixed/Technical/Notes
 
-## Summary
-1-2 clear sentences about what this PR does. Use concrete examples.
-Example: "This PR improves the login page by changing the submit button color from blue to green and adding email validation."
-
-## What Changed
-List specific changes with details:
-- "Changed button color from #007bff to #28a745 in components/LoginForm.tsx"
-- "Added email @ symbol validation in utils/validators.ts"
-- "Updated font size in sidebar from 14px to 16px"
-
-## Technical Details
-- What functions/components were modified?
-- What was added or removed?
-- Any important logic changes?
-
-## Testing
-- What should be tested?
-- Provide specific test scenarios.
-
-## Risks and Review Notes
-- Any breaking changes?
-- Performance impact?
-- Edge cases to consider?
-
-=== CHANGELOG FORMAT ===
-Structure (no PR title/number/author/date - just content):
-
-### Added
-- New functions, components, or features added (with specific names).
-
-### Changed
-- Specific modifications (colors, sizes, logic, dependencies).
-Example: "Changed primary button color from blue to green in all components"
-
-### Fixed
-- Bug fixes (if visible in diff).
-
-### Technical
-- Configuration, tests, dependencies.
-
-### Notes
-- Important information for reviewers.
-
-=== CRITICAL RULES ===
-1. ANALYZE THE ACTUAL DIFF - not just file names.
-2. BE SPECIFIC - mention exact values (colors, sizes, names, functions).
-3. BE CONCRETE - use examples developers can understand immediately.
-4. DON'T INVENT - only describe what you see in the code.
-5. KEEP IT SHORT - but useful.
-6. RETURN ONLY VALID JSON.`;
+Be specific, mention exact values, be concrete.`;
 
             try {
               const response = await fetch(process.env.AI_ENDPOINT, {
@@ -417,7 +340,7 @@ Example: "Changed primary button color from blue to green in all components"
                   messages: [
                     {
                       role: "system",
-                      content: "You are an expert code reviewer. Analyze diffs and explain code changes in simple, concrete, specific terms. Always return valid JSON."
+                      content: "You are GitHub Copilot. Analyze code diffs and return valid JSON only."
                     },
                     {
                       role: "user",
@@ -434,7 +357,7 @@ Example: "Changed primary button color from blue to green in all components"
 
               if (!response.ok) {
                 const errorText = await response.text();
-                core.warning(`AI request failed with status ${response.status}: ${errorText}`);
+                core.warning(`AI request failed: ${response.status}`);
                 throw new Error(`AI request failed with status ${response.status}`);
               }
 
@@ -443,19 +366,15 @@ Example: "Changed primary button color from blue to green in all components"
 
               if (content) {
                 const parsed = JSON.parse(content);
-
                 if (parsed?.pr_description && parsed.pr_description.trim().length > 100) {
                   prDescription = parsed.pr_description.trim();
                 }
-
                 if (parsed?.changelog && parsed.changelog.trim().length > 50) {
-                  changelog = parsed.changelog
-                    .replace(/^# Changelog\s*/i, "")
-                    .trim();
+                  changelog = parsed.changelog.replace(/^# Changelog\s*/i, "").trim();
                 }
               }
             } catch (error) {
-              core.warning(`AI generation failed, using fallback: ${error.message}`);
+              core.warning(`AI generation failed: ${error.message}`);
             }
 
             core.setOutput("pr_description", prDescription);
@@ -473,8 +392,6 @@ Example: "Changed primary button color from blue to green in all components"
               pull_number: context.issue.number,
               body: process.env.PR_DESCRIPTION
             });
-
-            core.info("PR description updated.");
 
       - name: Update CHANGELOG.md
         uses: actions/github-script@v8
@@ -538,42 +455,32 @@ All notable changes to this project will be documented in this file.
 
             fs.writeFileSync(changelogPath, `${changelog.trim()}\n`);
 
-            core.info("CHANGELOG.md updated while preserving history.");
-
-      - name: Commit and push CHANGELOG.md to PR branch
-        if: github.event.pull_request.head.repo.full_name == github.repository
+      - name: Commit and push CHANGELOG
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           git add CHANGELOG.md
-
           if git diff --cached --quiet; then
-            echo "No changelog changes to commit"
+            echo "No changelog changes"
             exit 0
           fi
-
           git commit -m "docs: update CHANGELOG.md for PR #${{ github.event.pull_request.number }}"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
 
-      - name: Comment on PR with status
+      - name: Comment on PR
         if: always()
         uses: actions/github-script@v8
         with:
           script: |
-            const summary = `
-            ✨ **Automated PR Analysis Complete**
+            const summary = `✨ **PR Analysis Complete**
+- **Files**: ${{ fromJson(steps.changes.outputs.stats).fileCount }}
+- **Changes**: +${{ fromJson(steps.changes.outputs.stats).additions }}/-${{ fromJson(steps.changes.outputs.stats).deletions }}
+- **Changelog**: Updated
 
-            - **Files analyzed**: ${{ fromJson(steps.changes.outputs.stats).fileCount }}
-            - **Lines changed**: +${{ fromJson(steps.changes.outputs.stats).additions }}/-${{ fromJson(steps.changes.outputs.stats).deletions }}
-            - **Changelog**: Updated in the PR branch and history was preserved.
-
-            See the PR description above for the detailed analysis.
-            `;
-
+See description above for details.`;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: summary
-            }).catch((error) => core.warning("Could not post comment: " + error.message));
+            }).catch(() => {});
