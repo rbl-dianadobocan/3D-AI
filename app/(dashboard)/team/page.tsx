@@ -1,15 +1,8 @@
-import { Users } from "lucide-react";
 import { Header } from "@/components/layout/header";
-import { MemberCard } from "@/components/team/member-card";
+import { TeamFilters } from "@/components/team/team-filters";
 import { teamMembers } from "@/lib/mock-data";
 
-const statusOrder = { online: 0, away: 1, offline: 2 };
-
 export default function TeamPage() {
-  const sorted = [...teamMembers].sort(
-    (a, b) => statusOrder[a.status] - statusOrder[b.status]
-  );
-
   const online = teamMembers.filter((m) => m.status === "online").length;
   const away = teamMembers.filter((m) => m.status === "away").length;
 
@@ -57,12 +50,8 @@ export default function TeamPage() {
           ))}
         </div>
 
-        {/* Member grid */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {sorted.map((member) => (
-            <MemberCard key={member.id} member={member} />
-          ))}
-        </div>
+        {/* Filterable member grid */}
+        <TeamFilters members={teamMembers} />
       </div>
     </div>
   );
