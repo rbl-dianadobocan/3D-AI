@@ -2,7 +2,7 @@ name: PR AI Docs
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [ opened, synchronize, reopened, ready_for_review ]
 
 permissions:
   contents: write
@@ -77,7 +77,7 @@ jobs:
                   changeType,
                   additions: f.additions,
                   deletions: f.deletions,
-                  patch: patch.slice(0, 15000),
+                  patch: patch.slice(0, 10000),
                   summary: {
                     isConfigFile,
                     hasImportChanges,
@@ -137,7 +137,9 @@ jobs:
 
             const generateDetailedFallback = () => {
               const sections = ["## Summary"];
+
               sections.push(`This PR contains **${stats.fileCount} file changes** with **${stats.additions} additions** and **${stats.deletions} deletions**.`);
+
               if (stats.frontendFiles > 0) sections.push(`- **Frontend**: ${stats.frontendFiles} file(s) modified`);
               if (stats.backendFiles > 0) sections.push(`- **Backend**: ${stats.backendFiles} file(s) modified`);
               if (stats.configFiles > 0) sections.push(`- **Configuration**: ${stats.configFiles} file(s) modified`);
@@ -149,15 +151,20 @@ jobs:
 
               const addCategory = (title, files) => {
                 if (!files || files.length === 0) return;
+
                 sections.push(`### ${title}`);
+
                 files.slice(0, 15).forEach((file) => {
                   let detail = `- **${file.filename}** (${file.status})`;
+
                   if (file.summary.addedFunctions.length > 0) {
                     detail += ` - Added: ${file.summary.addedFunctions.join(", ")}`;
                   }
+
                   if (file.summary.hasImportChanges) {
                     detail += " - Imports/dependencies updated";
                   }
+
                   detail += ` (+${file.additions}/-${file.deletions})`;
                   sections.push(detail);
                 });
@@ -173,56 +180,71 @@ jobs:
               sections.push("");
               sections.push("## Technical Details");
               sections.push("- Review the diff details for implementation specifics.");
+
               if (changes.some((file) => file.summary.hasImportChanges)) {
                 sections.push("- Imports or dependencies were updated.");
               }
+
               if (categorized.config?.length > 0) {
                 sections.push("- Configuration files were modified. Verify environment-specific behavior.");
               }
+
               if (stats.testFiles > 0) {
                 sections.push(`- Test files updated: ${stats.testFiles}.`);
               }
 
               sections.push("");
               sections.push("## Testing");
+
               if (stats.testFiles > 0) {
-                sections.push(`- Automated test files are included in this PR.`);
+                sections.push("- Automated test files are included in this PR.");
                 sections.push("- Run the existing test suite before merging.");
               } else {
                 sections.push("- No automated test files were detected in this diff.");
               }
+
               sections.push("- Manual validation is recommended for all changed flows.");
 
               sections.push("");
               sections.push("## Risks and Review Notes");
+
               const risks = [];
+
               if (stats.deletions > stats.additions * 2) {
                 risks.push("- Large number of deletions. Verify removed code is no longer needed.");
               }
+
               if (categorized.config?.length > 0) {
                 risks.push("- Configuration changes may affect runtime behavior.");
               }
+
               if (!stats.testFiles || stats.testFiles === 0) {
                 risks.push("- No test updates detected. Manual testing is important.");
               }
+
               if (risks.length === 0) {
                 risks.push("- No major risks identified. Standard code review recommended.");
               }
+
               sections.push(...risks);
+
               return sections.join("\n");
             };
 
             const generateDetailedChangelog = () => {
               const sections = [];
+
               sections.push("### Added");
               const addedItems = changes
                 .filter((file) => file.status === "added")
                 .map((file) => `- Added \`${file.filename}\`.`);
+
               const newFunctions = changes
                 .flatMap((file) =>
                   file.summary.addedFunctions.map((fn) => `- Added \`${fn}\` in \`${file.filename}\`.`)
                 )
                 .slice(0, 10);
+
               if (addedItems.length > 0 || newFunctions.length > 0) {
                 sections.push(...addedItems);
                 sections.push(...newFunctions);
@@ -232,6 +254,7 @@ jobs:
 
               sections.push("");
               sections.push("### Changed");
+
               const changedItems = changes
                 .filter((file) => file.status === "modified")
                 .map((file) => {
@@ -242,6 +265,7 @@ jobs:
                   detail += ` (+${file.additions}/-${file.deletions}).`;
                   return detail;
                 });
+
               if (changedItems.length > 0) {
                 sections.push(...changedItems);
               } else {
@@ -254,16 +278,21 @@ jobs:
 
               sections.push("");
               sections.push("### Technical");
+
               const technical = [];
+
               if (categorized.config?.length > 0) {
                 technical.push(`- Updated configuration-related files: ${categorized.config.map((file) => `\`${file.filename}\``).join(", ")}.`);
               }
+
               if (changes.some((file) => file.summary.hasImportChanges)) {
                 technical.push("- Updated imports or dependencies.");
               }
+
               if (stats.testFiles > 0) {
                 technical.push(`- Updated test files: ${stats.testFiles}.`);
               }
+
               if (technical.length > 0) {
                 sections.push(...technical);
               } else {
@@ -285,27 +314,331 @@ jobs:
             let changelog = generateDetailedChangelog();
 
             const diffContent = changes.map((file, index) => {
-              return `FILE ${index + 1}: ${file.filename}\nSTATUS: ${file.status}\nSTATS: +${file.additions}/-${file.deletions}\nPATCH:\n${file.patch}\n---`;
+              return `FILE ${index + 1}: ${file.filename}
+            STATUS: ${file.status}
+            STATS: +${file.additions}/-${file.deletions}
+            CONTENT:
+            ${file.patch}
+            ---`;
             }).join("\n\n");
 
-            const prompt = `You are an expert code reviewer. Analyze code changes and explain them in simple, concrete terms.
+            const prompt = `
+            You are a Principal Software Engineer, Technical Lead and Software Documentation Specialist.
 
-EXAMPLES:
-- "Changed button color from blue (#007bff) to green (#28a745)"
-- "Added email validation to check for @ symbol"
-- "Removed console.log statements"
-- "Updated font size from 14px to 16px"
+            Your responsibility is to analyze the REAL Pull Request diff and generate documentation that is genuinely useful for:
 
-Return ONLY valid JSON:
-{"pr_description": "markdown", "changelog": "markdown"}
+            - Developers
+            - Code Reviewers
+            - Technical Leads
+            - Product Owners
+            - Project Managers
 
-PR: ${context.payload.pull_request.title}
-Files: ${stats.fileCount}, +${stats.additions}/-${stats.deletions}
+            Return ONLY valid JSON:
 
-DIFF:
-${diffContent}
+            {
+              "pr_description": "markdown",
+              "changelog": "markdown"
+            }
 
-Analyze and provide specific descriptions.`;
+            ==================================================
+            PR CONTEXT
+            ==================================================
+
+            Title:
+            ${context.payload.pull_request.title}
+
+            Description:
+            ${context.payload.pull_request.body || "(no description)"}
+
+            ==================================================
+            CHANGE STATISTICS
+            ==================================================
+
+            Files Changed: ${stats.fileCount}
+            Additions: ${stats.additions}
+            Deletions: ${stats.deletions}
+            Frontend Files: ${stats.frontendFiles}
+            Backend Files: ${stats.backendFiles}
+            Config Files: ${stats.configFiles}
+            Test Files: ${stats.testFiles}
+
+            ==================================================
+            ACTUAL DIFF CONTENT
+            ==================================================
+
+            ${diffContent}
+
+            ==================================================
+            PR DESCRIPTION REQUIREMENTS
+            ==================================================
+
+            Write the PR description in clear, natural, professional language.
+
+            The description must be easy to understand by both technical and non-technical stakeholders.
+
+            Avoid generic AI wording.
+
+            Avoid vague statements.
+
+            Base every statement on the actual diff whenever possible.
+
+            Use the following structure exactly:
+
+            ## Summary
+
+            Provide a concise overview explaining:
+
+            - what was implemented;
+            - what problem was solved;
+            - the overall objective;
+            - the expected impact on the application.
+
+            Write complete sentences in natural language.
+
+            ==================================================
+
+            ## What Changed
+
+            Describe the implementation step by step.
+
+            For every major change explain:
+
+            - what was modified;
+            - what was added;
+            - what was removed;
+            - what was refactored.
+
+            Group related changes together.
+
+            Whenever visible in the diff, mention:
+
+            - files;
+            - classes;
+            - components;
+            - functions;
+            - services;
+            - modules;
+            - APIs.
+
+            Do not simply list files.
+
+            Explain the actual implementation.
+
+            ==================================================
+
+            ## Why It Changed
+
+            Explain the motivation behind the change.
+
+            Use:
+
+            - PR title;
+            - PR description;
+            - code modifications.
+
+            If the business reason cannot be determined from the available information, write:
+
+            "The business reason is not visible in the PR and should be confirmed from the related ticket or requirement."
+
+            ==================================================
+
+            ## Affected Areas
+
+            List only areas actually impacted by the changes.
+
+            Examples:
+
+            - User Interface
+            - Business Logic
+            - State Management
+            - API Integration
+            - Routing
+            - Configuration
+            - Data Models
+            - Database
+            - CI/CD
+            - Testing
+
+            For each affected area briefly explain the impact.
+
+            ==================================================
+
+            ## Technical Details
+
+            Provide implementation-focused details for developers.
+
+            Include only information visible in the diff.
+
+            Mention:
+
+            - classes;
+            - functions;
+            - components;
+            - APIs;
+            - services;
+            - dependencies;
+            - configuration changes;
+            - architectural decisions;
+            - refactoring activities.
+
+            Explain how the implementation works when possible.
+
+            ==================================================
+
+            ## Testing
+
+            Generate realistic testing guidance.
+
+            ### Automated Testing
+
+            Mention:
+
+            - added tests;
+            - updated tests;
+            - missing tests when applicable.
+
+            ### Manual Testing
+
+            Provide practical scenarios that should be validated.
+
+            Focus on the exact functionality changed by the PR.
+
+            ### Regression Testing
+
+            Identify surrounding areas that should be verified to ensure no existing behavior was affected.
+
+            ==================================================
+
+            ## Risks and Review Notes
+
+            Provide reviewer guidance.
+
+            Include:
+
+            - risks;
+            - edge cases;
+            - possible regressions;
+            - deployment considerations;
+            - areas requiring special attention during review.
+
+            If no significant risk is visible write:
+
+            "No major risks identified."
+
+            ==================================================
+            CHANGELOG REQUIREMENTS
+            ==================================================
+
+            IMPORTANT:
+
+            The generated changelog content will be inserted into an existing CHANGELOG.md file.
+
+            Do NOT generate:
+
+            - # Changelog
+            - PR number
+            - PR title
+            - Author
+            - Date
+            - Separators
+
+            Generate ONLY the changelog entry content.
+
+            Do NOT reference previous changelog entries.
+
+            Do NOT rewrite previous entries.
+
+            Do NOT invent changes.
+
+            Write for future developers reading project history.
+
+            Use exactly this structure:
+
+            ### Added
+
+            List:
+
+            - newly added functionality;
+            - components;
+            - services;
+            - APIs;
+            - tests;
+            - capabilities;
+            - files.
+
+            If nothing was added write:
+
+            - No new functionality added.
+
+            ==================================================
+
+            ### Changed
+
+            Describe:
+
+            - implementation updates;
+            - behavior changes;
+            - refactoring;
+            - workflow improvements;
+            - UI updates;
+            - architecture updates.
+
+            Explain impact where relevant.
+
+            ==================================================
+
+            ### Fixed
+
+            List only fixes clearly visible in the diff.
+
+            If no fix can be identified write:
+
+            - No explicit bug fix identified from the diff.
+
+            ==================================================
+
+            ### Technical
+
+            List:
+
+            - dependency updates;
+            - configuration changes;
+            - CI/CD updates;
+            - infrastructure updates;
+            - internal implementation improvements;
+            - test updates.
+
+            ==================================================
+
+            ### Notes
+
+            Include:
+
+            - review considerations;
+            - testing considerations;
+            - risks;
+            - limitations;
+            - follow-up work if visible.
+
+            ==================================================
+            QUALITY RULES
+            ==================================================
+
+            1. Analyze actual code changes, not only filenames.
+            2. Mention real files when visible.
+            3. Mention real classes and functions when visible.
+            4. Explain what changed.
+            5. Explain why it changed.
+            6. Explain what is affected.
+            7. Explain what should be tested.
+            8. Explain risks when visible.
+            9. Never invent information.
+            10. Use natural human language.
+            11. Make the output useful for both project managers and developers.
+            12. Keep explanations concise but meaningful.
+            13. Prefer clarity over verbosity.
+            14. Return ONLY valid JSON.
+            `;
 
             try {
               const response = await fetch(process.env.AI_ENDPOINT, {
@@ -319,36 +652,45 @@ Analyze and provide specific descriptions.`;
                   messages: [
                     {
                       role: "system",
-                      content: "You are GitHub Copilot. Analyze diffs and return valid JSON."
+                      content: "You are GitHub Copilot, an expert code reviewer and technical documentation writer. Always return valid JSON."
                     },
                     {
                       role: "user",
                       content: prompt
                     }
                   ],
-                  temperature: 0.3,
-                  max_tokens: 3500,
-                  response_format: { type: "json_object" }
+                  temperature: 0.2,
+                  max_tokens: 5000,
+                  response_format: {
+                    type: "json_object"
+                  }
                 })
               });
 
               if (!response.ok) {
-                throw new Error(`AI failed: ${response.status}`);
+                const errorText = await response.text();
+                core.warning(`AI request failed with status ${response.status}: ${errorText}`);
+                throw new Error(`AI request failed with status ${response.status}`);
               }
 
               const data = await response.json();
               const content = data?.choices?.[0]?.message?.content;
+
               if (content) {
                 const parsed = JSON.parse(content);
+
                 if (parsed?.pr_description && parsed.pr_description.trim().length > 100) {
                   prDescription = parsed.pr_description.trim();
                 }
+
                 if (parsed?.changelog && parsed.changelog.trim().length > 50) {
-                  changelog = parsed.changelog.replace(/^# Changelog\s*/i, "").trim();
+                  changelog = parsed.changelog
+                    .replace(/^# Changelog\s*/i, "")
+                    .trim();
                 }
               }
             } catch (error) {
-              core.warning(`AI failed: ${error.message}`);
+              core.warning(`AI generation failed, using fallback: ${error.message}`);
             }
 
             core.setOutput("pr_description", prDescription);
@@ -367,6 +709,8 @@ Analyze and provide specific descriptions.`;
               body: process.env.PR_DESCRIPTION
             });
 
+            core.info("PR description updated.");
+
       - name: Update CHANGELOG.md
         uses: actions/github-script@v8
         env:
@@ -377,29 +721,49 @@ Analyze and provide specific descriptions.`;
         with:
           script: |
             const fs = require("fs");
+
             const changelogPath = "CHANGELOG.md";
             const prNumber = process.env.PR_NUMBER;
             const prTitle = process.env.PR_TITLE;
             const prAuthor = process.env.PR_AUTHOR;
             const newChangelog = (process.env.NEW_CHANGELOG || "").trim();
-            const date = new Date().toISOString().split("T")[0];
+            const date = new Date().toISOString().replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
+
             const startMarker = `<!-- PR-${prNumber}-CHANGELOG-START -->`;
             const endMarker = `<!-- PR-${prNumber}-CHANGELOG-END -->`;
-            const newEntry = `${startMarker}\n## PR #${prNumber} - ${prTitle}\n\n**Author:** @${prAuthor}\n**Date:** ${date}\n\n${newChangelog}\n\n---\n${endMarker}`;
+
+            const newEntry = `${startMarker}
+            ## PR #${prNumber} - ${prTitle}
+
+            **Author:** @${prAuthor}  
+            **Date:** ${date}
+
+            ${newChangelog}
+
+            ---
+            ${endMarker}`;
 
             let changelog = "";
+
             if (fs.existsSync(changelogPath)) {
               changelog = fs.readFileSync(changelogPath, "utf8").trim();
             }
+
             if (!changelog) {
-              changelog = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\n---";
+              changelog = `# Changelog
+
+            All notable changes to this project will be documented in this file.
+
+            ---`;
             }
 
             const existingEntryRegex = new RegExp(`${startMarker}[\\s\\S]*?${endMarker}`, "m");
+
             if (existingEntryRegex.test(changelog)) {
               changelog = changelog.replace(existingEntryRegex, newEntry);
             } else {
               const titleRegex = /^# Changelog\s*\n*/;
+
               if (titleRegex.test(changelog)) {
                 changelog = changelog.replace(titleRegex, `# Changelog\n\n${newEntry}\n\n`);
               } else {
@@ -409,28 +773,42 @@ Analyze and provide specific descriptions.`;
 
             fs.writeFileSync(changelogPath, `${changelog.trim()}\n`);
 
-      - name: Commit and push CHANGELOG
+            core.info("CHANGELOG.md updated while preserving history.");
+
+      - name: Commit and push CHANGELOG.md to PR branch
         if: github.event.pull_request.head.repo.full_name == github.repository
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add CHANGELOG.md
+
           if git diff --cached --quiet; then
-            echo "No changes"
+            echo "No changelog changes to commit"
             exit 0
           fi
+
           git commit -m "docs: update CHANGELOG.md for PR #${{ github.event.pull_request.number }}"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
 
-      - name: Comment on PR
+      - name: Comment on PR with status
         if: always()
         uses: actions/github-script@v8
         with:
           script: |
-            const summary = `✨ **PR Analysis Complete**\n- **Files**: ${{ fromJson(steps.changes.outputs.stats).fileCount }}\n- **Changes**: +${{ fromJson(steps.changes.outputs.stats).additions }}/-${{ fromJson(steps.changes.outputs.stats).deletions }}\n- **Changelog**: Updated\n\nSee description for details.`;
+            const summary = `
+            ✨ **Automated PR Analysis Complete**
+
+            - **Files analyzed**: ${{ fromJson(steps.changes.outputs.stats).fileCount }}
+            - **Lines changed**: +${{ fromJson(steps.changes.outputs.stats).additions }}/-${{ fromJson(steps.changes.outputs.stats).deletions }}
+            - **Changelog**: Updated in the PR branch and history was preserved.
+
+            See the PR description above for the detailed analysis.
+            `;
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: summary
-            }).catch(() => {});
+            }).catch((error) => core.warning("Could not post comment: " + error.message));
