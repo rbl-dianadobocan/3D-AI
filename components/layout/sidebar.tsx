@@ -53,6 +53,7 @@ export function Sidebar() {
         )}
         {navItems.map(({ href, icon: Icon, label }) => {
           const isActive = pathname === href;
+          const isDashboard = href === "/dashboard";
           return (
             <Link
               key={href}
@@ -60,7 +61,9 @@ export function Sidebar() {
               className={cn(
                 "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
                 isActive
-                  ? "bg-white/10 text-white shadow-sm"
+                  ? isDashboard
+                    ? "bg-blue-500/20 text-blue-100 shadow-sm"
+                    : "bg-white/10 text-white shadow-sm"
                   : "text-white/60 hover:bg-white/5 hover:text-white",
                 collapsed && "justify-center"
               )}
@@ -70,13 +73,20 @@ export function Sidebar() {
                 className={cn(
                   "h-5 w-5 shrink-0 transition-colors",
                   isActive
-                    ? "text-violet-400"
+                    ? isDashboard
+                      ? "text-blue-400"
+                      : "text-violet-400"
                     : "text-white/40 group-hover:text-white/80"
                 )}
               />
               {!collapsed && <span>{label}</span>}
               {isActive && !collapsed && (
-                <span className="ml-auto h-1.5 w-1.5 rounded-full bg-violet-400" />
+                <span
+                  className={cn(
+                    "ml-auto h-1.5 w-1.5 rounded-full",
+                    isDashboard ? "bg-blue-400" : "bg-violet-400"
+                  )}
+                />
               )}
             </Link>
           );
