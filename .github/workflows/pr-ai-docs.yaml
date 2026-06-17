@@ -110,7 +110,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           CHANGES_JSON: ${{ steps.changes.outputs.changes_json }}
-          CATEGORIZED_JSON: ${{ steps.changes.outputs.categorized_json }}
           STATS_JSON: ${{ steps.changes.outputs.stats }}
           AI_MODEL: openai/gpt-4.1
           AI_ENDPOINT: https://models.github.ai/inference/chat/completions
@@ -165,84 +164,84 @@ jobs:
             let prDescription = generateFallbackDescription();
             let changelog = generateFallbackChangelog();
 
-            const diffContent = changes.map((file, index) => {
-              return `FILE ${index + 1}: ${file.filename}
-STATUS: ${file.status}
-STATS: +${file.additions}/-${file.deletions}
-PATCH:
-${file.patch}
----`;
-            }).join("\n\n");
+            const diffContent = changes.map((file, index) => [
+              `FILE ${index + 1}: ${file.filename}`,
+              `STATUS: ${file.status}`,
+              `STATS: +${file.additions}/-${file.deletions}`,
+              "PATCH:",
+              file.patch,
+              "---"
+            ].join("\n")).join("\n\n");
 
-            const prompt = `
-            You are a Staff Software Engineer, Technical Lead, Senior Code Reviewer, and Project Documentation Specialist.
-
-            Analyze the actual Pull Request diff and generate clear documentation for developers, reviewers, technical leads, and project managers.
-
-            Return ONLY valid JSON with this exact shape:
-            {
-              "pr_description": "markdown",
-              "changelog": "markdown"
-            }
-
-            PR TITLE:
-            ${context.payload.pull_request.title}
-
-            PR DESCRIPTION:
-            ${context.payload.pull_request.body || "(no description)"}
-
-            STATS:
-            - Files changed: ${stats.fileCount}
-            - Additions: ${stats.additions}
-            - Deletions: ${stats.deletions}
-            - Frontend files: ${stats.frontendFiles}
-            - Backend files: ${stats.backendFiles}
-            - Config files: ${stats.configFiles}
-            - Test files: ${stats.testFiles}
-            - Styling files: ${stats.styleFiles}
-
-            DIFF:
-            ${diffContent}
-
-            PR DESCRIPTION REQUIREMENTS:
-
-            Use exactly these sections:
-
-            ## Summary
-            Write 2-4 clear paragraphs. Explain what this PR does overall, why it matters, and what problem or improvement it addresses.
-
-            ## What Changed
-            Explain the changes step by step in natural language. Group related changes by feature, flow, component, page, context, state management, filtering logic, chart behavior, layout, or shared UI behavior.
-
-            ## Application Impact
-            Explain which part of the application is affected and what the practical impact is for users and developers.
-
-            ## Technical Details
-            Explain the important implementation details in readable language. Mention new context/state, props, constants, helper functions, filtering logic, range handling, data transformations, UI wiring, or reusable components if visible in the diff.
-
-            ## Testing
-            Provide concrete manual testing recommendations based on the actual diff. If no automated tests were changed, say that clearly.
-
-            ## Risks and Review Notes
-            Mention possible risks, edge cases, regression areas, or things reviewers should pay attention to.
-
-            CHANGELOG REQUIREMENTS:
-
-            Use exactly this structure:
-
-            ### Added
-            ### Changed
-            ### Testing
-            ### Review Notes
-
-            WRITING STYLE:
-            - Use natural, human-readable language.
-            - Do not generate only a file list.
-            - Do not write generic filler.
-            - Do not invent requirements not supported by the diff.
-            - Explain intention, behavior, impact, and testing focus.
-            - Be detailed enough for a developer to understand the PR without opening every file.
-            `;
+            const prompt = [
+              "You are a Staff Software Engineer, Technical Lead, Senior Code Reviewer, and Project Documentation Specialist.",
+              "",
+              "Analyze the actual Pull Request diff and generate clear documentation for developers, reviewers, technical leads, and project managers.",
+              "",
+              "Return ONLY valid JSON with this exact shape:",
+              "{",
+              '  "pr_description": "markdown",',
+              '  "changelog": "markdown"',
+              "}",
+              "",
+              "PR TITLE:",
+              context.payload.pull_request.title,
+              "",
+              "PR DESCRIPTION:",
+              context.payload.pull_request.body || "(no description)",
+              "",
+              "STATS:",
+              `- Files changed: ${stats.fileCount}`,
+              `- Additions: ${stats.additions}`,
+              `- Deletions: ${stats.deletions}`,
+              `- Frontend files: ${stats.frontendFiles}`,
+              `- Backend files: ${stats.backendFiles}`,
+              `- Config files: ${stats.configFiles}`,
+              `- Test files: ${stats.testFiles}`,
+              `- Styling files: ${stats.styleFiles}`,
+              "",
+              "DIFF:",
+              diffContent,
+              "",
+              "PR DESCRIPTION REQUIREMENTS:",
+              "",
+              "Use exactly these sections:",
+              "",
+              "## Summary",
+              "Write 2-4 clear paragraphs. Explain what this PR does overall, why it matters, and what problem or improvement it addresses.",
+              "",
+              "## What Changed",
+              "Explain the changes step by step in natural language. Group related changes by feature, flow, component, page, context, state management, filtering logic, chart behavior, layout, or shared UI behavior.",
+              "",
+              "## Application Impact",
+              "Explain which part of the application is affected and what the practical impact is for users and developers.",
+              "",
+              "## Technical Details",
+              "Explain the important implementation details in readable language. Mention new context/state, props, constants, helper functions, filtering logic, range handling, data transformations, UI wiring, or reusable components if visible in the diff.",
+              "",
+              "## Testing",
+              "Provide concrete manual testing recommendations based on the actual diff. If no automated tests were changed, say that clearly.",
+              "",
+              "## Risks and Review Notes",
+              "Mention possible risks, edge cases, regression areas, or things reviewers should pay attention to.",
+              "",
+              "CHANGELOG REQUIREMENTS:",
+              "",
+              "Use exactly this structure:",
+              "",
+              "### Added",
+              "### Changed",
+              "### Testing",
+              "### Review Notes",
+              "",
+              "WRITING STYLE:",
+              "- Use natural, human-readable language.",
+              "- Do not generate only a file list.",
+              "- Do not write generic filler.",
+              "- Do not invent requirements not supported by the diff.",
+              "- Explain intention, behavior, impact, and testing focus.",
+              "- Be detailed enough for a developer to understand the PR without opening every file."
+            ].join("\n");
 
             try {
               const response = await fetch(process.env.AI_ENDPOINT, {
@@ -331,16 +330,18 @@ ${file.patch}
             const startMarker = `<!-- PR-${prNumber}-CHANGELOG-START -->`;
             const endMarker = `<!-- PR-${prNumber}-CHANGELOG-END -->`;
 
-            const newEntry = `${startMarker}
-## PR #${prNumber} - ${prTitle}
-
-**Author:** @${prAuthor}
-**Date:** ${date}
-
-${newChangelog}
-
----
-${endMarker}`;
+            const newEntry = [
+              startMarker,
+              `## PR #${prNumber} - ${prTitle}`,
+              "",
+              `**Author:** @${prAuthor}`,
+              `**Date:** ${date}`,
+              "",
+              newChangelog,
+              "",
+              "---",
+              endMarker
+            ].join("\n");
 
             let changelog = "";
 
@@ -386,12 +387,14 @@ ${endMarker}`;
         uses: actions/github-script@v8
         with:
           script: |
-            const summary = `✨ **PR Analysis Complete**
-- **Files**: ${{ fromJson(steps.changes.outputs.stats).fileCount }}
-- **Changes**: +${{ fromJson(steps.changes.outputs.stats).additions }}/-${{ fromJson(steps.changes.outputs.stats).deletions }}
-- **Changelog**: Updated
-
-See description for details.`;
+            const summary = [
+              "✨ **PR Analysis Complete**",
+              `- **Files**: ${{ fromJson(steps.changes.outputs.stats).fileCount }}`,
+              `- **Changes**: +${{ fromJson(steps.changes.outputs.stats).additions }}/-${{ fromJson(steps.changes.outputs.stats).deletions }}`,
+              "- **Changelog**: Updated",
+              "",
+              "See description for details."
+            ].join("\n");
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
