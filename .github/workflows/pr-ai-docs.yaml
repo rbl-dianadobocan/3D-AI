@@ -440,10 +440,8 @@ Be specific, mention actual function/component names, explain impact.`;
               with open(changelog_path, 'r') as f:
                   content = f.read()
 
-              pattern = rf'^## PR #{re.escape(pr_number)} - .+?(?=^## PR #|\Z)'
+              pattern = rf'^## PR #{re.escape(pr_number)} - [^\n]+\n.+?(?=^## PR #|\Z)'
               content = re.sub(pattern, '', content, flags=re.DOTALL | re.MULTILINE)
-
-              content = re.sub(r'\n{4,}', '\n\n\n', content)
 
               if MARKER not in content:
                   first_h2 = re.search(r'^## ', content, re.MULTILINE)
@@ -452,7 +450,12 @@ Be specific, mention actual function/component names, explain impact.`;
                   else:
                       content = content.rstrip() + '\n\n' + MARKER + '\n\n'
 
-              insert_pos = content.index(MARKER) + len(MARKER)
+              marker_pos = content.find(MARKER)
+              if marker_pos == -1:
+                  content = content.rstrip() + '\n\n' + MARKER + '\n\n'
+                  marker_pos = content.find(MARKER)
+
+              insert_pos = marker_pos + len(MARKER)
               content = content[:insert_pos] + '\n' + new_entry + content[insert_pos:]
 
               content = re.sub(r'\n{4,}', '\n\n\n', content)
