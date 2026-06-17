@@ -67,28 +67,111 @@ jobs:
 
             const fallbackDescription = [
               "## Summary",
-              `- Updated ${stats.fileCount || 0} file(s)`,
-              `- Additions: ${stats.additions || 0}`,
-              `- Deletions: ${stats.deletions || 0}`,
+              `This PR updates ${stats.fileCount || 0} file(s), with ${stats.additions || 0} additions and ${stats.deletions || 0} deletions.`,
+              "The AI-generated description could not be created, so this fallback summary was generated from the changed files.",
               "",
-              "## Changed Files",
-              ...changes.slice(0, 25).map((f) => `- ${f.filename} (${f.status}, +${f.additions}/-${f.deletions})`)
+              "## What Changed",
+              ...changes.slice(0, 25).map((f) => `- ${f.filename} was ${f.status} (+${f.additions}/-${f.deletions}).`),
+              "",
+              "## Technical Details",
+              "- Review the changed files listed above for implementation details.",
+              "",
+              "## Testing",
+              "- No automated test information was detected by the fallback generator.",
+              "- Please validate the affected functionality manually.",
+              "",
+              "## Risks and Review Notes",
+              "- This description was generated without AI analysis, so reviewers should inspect the diff carefully."
             ].join("\n");
 
             const fallbackChangelog = [
-              "# PR Changelog",
+              "# Changelog",
               "",
-              "## Files",
-              ...changes.slice(0, 50).map((f) => `- ${f.filename}: ${f.status} (+${f.additions}/-${f.deletions})`)
+              "## Added",
+              "- No changes.",
+              "",
+              "## Changed",
+              ...changes.slice(0, 50).map((f) => `- ${f.filename} was ${f.status} (+${f.additions}/-${f.deletions}).`),
+              "",
+              "## Fixed",
+              "- No changes.",
+              "",
+              "## Technical",
+              `- Updated ${stats.fileCount || 0} file(s) in this pull request.`,
+              "",
+              "## Notes",
+              "- AI changelog generation failed, so this fallback changelog was generated from file metadata."
             ].join("\n");
 
             const prompt = [
-              "You are GitHub Copilot generating pull request documentation.",
-              "Return STRICT JSON only with keys: pr_description, changelog.",
-              "Requirements:",
-              "- pr_description must be Markdown with sections: Summary, What Changed, Risks, Testing.",
-              "- changelog must be Markdown suitable for a CHANGELOG_PR.md file.",
-              "- Keep concise and technical.",
+              "You are an experienced senior software engineer and release manager.",
+              "Your job is to analyze a GitHub Pull Request diff and generate documentation that is clear, detailed, human-readable, and useful for reviewers.",
+              "",
+              "Return STRICT JSON only with the following keys:",
+              "- pr_description",
+              "- changelog",
+              "",
+              "General rules:",
+              "- Do not invent changes that are not visible in the diff.",
+              "- Focus on user impact, developer impact, and review-relevant details.",
+              "- Write in clear, natural English.",
+              "- Avoid generic phrases like 'updated files' or 'made changes'.",
+              "- Explain WHY the changes matter when it can be inferred from the diff.",
+              "- Group related changes together.",
+              "- Mention important files, components, workflows, scripts, or configuration changes.",
+              "- If the diff is small, keep the output concise but still meaningful.",
+              "- If the diff is large, organize the output into readable sections.",
+              "",
+              "The pr_description must be Markdown and must use this exact structure:",
+              "",
+              "## Summary",
+              "- Provide 2-4 human-readable sentences explaining the purpose of the PR.",
+              "- Explain the problem solved or improvement introduced.",
+              "- Mention the main area of the application affected.",
+              "",
+              "## What Changed",
+              "- Use grouped bullet points.",
+              "- Each bullet should explain what changed and why it matters.",
+              "- Mention relevant files or modules only when useful.",
+              "",
+              "## Technical Details",
+              "- Explain important implementation details.",
+              "- Mention new components, functions, workflows, data structures, API calls, or configuration changes.",
+              "- Keep this section useful for code reviewers.",
+              "",
+              "## Testing",
+              "- Describe likely testing based on the changes.",
+              "- If tests are visible in the diff, mention them specifically.",
+              "- If no tests are visible, say: 'No automated tests were detected in this diff.'",
+              "- Suggest manual validation steps.",
+              "",
+              "## Risks and Review Notes",
+              "- Mention possible risks, edge cases, or areas that deserve extra attention.",
+              "- If no obvious risk exists, say: 'No major risks identified from the diff.'",
+              "",
+              "The changelog must be Markdown suitable for a CHANGELOG_PR.md file and must use this exact structure:",
+              "",
+              "# Changelog",
+              "",
+              "## Added",
+              "- List new features, components, workflows, or capabilities.",
+              "",
+              "## Changed",
+              "- List behavior changes, refactors, UI updates, or improvements.",
+              "",
+              "## Fixed",
+              "- List bug fixes or corrected behavior.",
+              "",
+              "## Technical",
+              "- List internal implementation details, dependency/configuration changes, CI/CD changes, or developer tooling updates.",
+              "",
+              "## Notes",
+              "- Include anything reviewers or release managers should know.",
+              "",
+              "If a changelog section has no relevant items, write:",
+              "- No changes.",
+              "",
+              "Pull Request context:",
               "",
               "PR title:",
               context.payload.pull_request.title,
@@ -116,8 +199,14 @@ jobs:
                 body: JSON.stringify({
                   model: process.env.AI_MODEL,
                   messages: [
-                    { role: "system", content: "You are GitHub Copilot." },
-                    { role: "user", content: prompt }
+                    {
+                      role: "system",
+                      content: "You are GitHub Copilot acting as a senior code reviewer and release note writer."
+                    },
+                    {
+                      role: "user",
+                      content: prompt
+                    }
                   ],
                   temperature: 0.2,
                   response_format: {
@@ -137,6 +226,7 @@ jobs:
               if (parsed?.pr_description) {
                 prDescription = parsed.pr_description;
               }
+
               if (parsed?.changelog) {
                 changelog = parsed.changelog;
               }
