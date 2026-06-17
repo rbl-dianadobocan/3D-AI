@@ -7,26 +7,23 @@
 **Date:** 2026-06-17
 
 ### Added
-- New `TeamFilters` component for searching and filtering team members by name, role, skill, department, and status.
-- Department and status filter pills with clear visual states.
-- "Clear filters" button to reset all filters.
-- Empty state messaging when no members match filters.
-- Join date display on MemberCard.
+- Introduced `TeamFilters` component for advanced search and filtering on the Team dashboard page.
+- Added department and status filter pills, search input, clear filters button, member count display, and empty state messaging.
+- Enhanced MemberCard with department-specific avatar gradients, color-coded badges, and join date display.
 
 ### Changed
-- Team dashboard page now uses the `TeamFilters` component instead of static sorting and grid rendering.
-- MemberCard displays department-specific avatar gradients and color-coded badges for department and status.
-- Improved layout for member info, including join date and email.
+- Replaced static member grid and sorting logic in the Team page with the new filterable grid powered by `TeamFilters`.
+- Updated MemberCard layout and visual cues for improved clarity and accessibility.
 
 ### Testing
-- Manual testing required for search and filter functionality, filter pill states, clear filters, empty state, and MemberCard display.
+- Manual testing required: verify search and filter functionality, combined filters, clear filters behavior, and MemberCard information display.
 - No automated tests were changed.
 
 ### Review Notes
-- Review filtering logic for correctness and edge cases.
-- Check UI responsiveness and accessibility for filter controls and empty state.
-- Confirm MemberCard visual clarity and accessibility.
-- Ensure "Clear filters" resets all filter state.
+- Pay attention to filtering logic correctness and UI responsiveness.
+- Check accessibility and visual clarity of filter pills and empty state.
+- Ensure clear filters resets all relevant state.
+- Risk is limited to frontend UI and behavior; no backend changes.
 
 ---
 <!-- PR-28-CHANGELOG-END -->
