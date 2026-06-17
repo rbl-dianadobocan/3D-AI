@@ -1,18 +1,20 @@
-# Changelog for PR #7
+# Changelog for PR #8
+
+Generated automatically on: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
 
 # Changelog
 
 ## Added
-- No changes.
+- No new files or functions added
 
 ## Changed
-- components/layout/sidebar.tsx was modified (+13/-3).
+- .github/workflows/pr-ai-docs.yaml
 
 ## Fixed
-- No changes.
+- See individual commit messages for bug fixes
 
 ## Technical
-- Updated 1 file(s) in this pull request.
+- Configuration updated (1 file(s))
 
 ## Notes
-- AI changelog generation failed, so this fallback changelog was generated from file metadata.
+- Total changes: 1 files, +1/-1 lines
