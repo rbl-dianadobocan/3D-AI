@@ -1,5 +1,43 @@
 # Changelog
 
+<!-- PR-27-CHANGELOG-START -->
+## PR #27 - feat(tasks): add quick task creation modal
+
+**Author:** @andreistancu21
+**Date:** 2026-06-17
+
+### Added
+- Quick task creation modal (`QuickTaskModal`) for rapid task entry.
+- Floating action button (`QuickTaskFAB`) fixed to dashboard for opening the modal.
+- Keyboard shortcut (Cmd+K/Ctrl+K) to open the task creation modal.
+- Task context (`TaskProvider`, `useTask`) for modal state and task creation logic.
+- Kanban board integration for handling new task creation via custom events.
+- Kanban board state persistence to localStorage (`kanban-storage.ts`).
+
+### Changed
+- Dashboard layout refactored to use a new client-side layout component, wrapping content with task context and including FAB and modal.
+- Kanban board updated to listen for task creation events and update state accordingly.
+
+### Testing
+- Manual testing recommended:
+  - Verify FAB appears and opens modal.
+  - Test keyboard shortcut for modal.
+  - Create tasks and confirm they appear in Kanban board.
+  - Check modal closing methods and form validation.
+  - Reload page and confirm task persistence.
+  - Test accessibility and keyboard navigation.
+- No automated tests were changed.
+
+### Review Notes
+- Review localStorage persistence and error handling.
+- Confirm custom event handling does not introduce memory leaks or race conditions.
+- Check task ID generation for uniqueness.
+- Test modal accessibility and focus management.
+- Ensure dashboard layout refactor does not regress other features.
+
+---
+<!-- PR-27-CHANGELOG-END -->
+
 <!-- PR-25-CHANGELOG-START -->
 ## PR #25 - Update pr-ai-docs.yaml
 
