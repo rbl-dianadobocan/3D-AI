@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   AreaChart,
   Area,
@@ -12,17 +13,35 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { productivityData } from "@/lib/mock-data";
+import { useDateRange, DATE_RANGE_LABELS } from "@/lib/date-range-context";
+
+const RANGE_SLICE: Record<string, number> = {
+  "7d": 1,
+  "30d": 2,
+  "3m": 3,
+};
 
 export function ProductivityChart() {
+  const { range } = useDateRange();
+
+  const filteredData = useMemo(() => {
+    const sliceCount = RANGE_SLICE[range];
+    return sliceCount !== undefined
+      ? productivityData.slice(-sliceCount)
+      : productivityData;
+  }, [range]);
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Team Productivity</CardTitle>
-        <CardDescription>Monthly output by department (%)</CardDescription>
+        <CardDescription>
+          Monthly output by department (%) &middot; {DATE_RANGE_LABELS[range]}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={280}>
-          <AreaChart data={productivityData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+          <AreaChart data={filteredData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="backendGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />

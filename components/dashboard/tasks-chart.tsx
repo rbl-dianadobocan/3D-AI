@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -11,18 +12,36 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { tasksCompletedData } from "@/lib/mock-data";
+import { useDateRange, DATE_RANGE_LABELS } from "@/lib/date-range-context";
+
+const RANGE_SLICE: Record<string, number> = {
+  "7d": 7,
+  "30d": 5,
+  "3m": 3,
+};
 
 export function TasksChart() {
+  const { range } = useDateRange();
+
+  const filteredData = useMemo(() => {
+    const sliceCount = RANGE_SLICE[range];
+    return sliceCount !== undefined
+      ? tasksCompletedData.slice(-sliceCount)
+      : tasksCompletedData;
+  }, [range]);
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Tasks This Week</CardTitle>
-        <CardDescription>Completed vs pending per day</CardDescription>
+        <CardDescription>
+          Completed vs pending per day &middot; {DATE_RANGE_LABELS[range]}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart
-            data={tasksCompletedData}
+            data={filteredData}
             margin={{ top: 5, right: 10, left: -20, bottom: 0 }}
             barCategoryGap="30%"
             barGap={4}
