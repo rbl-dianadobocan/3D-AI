@@ -34,48 +34,45 @@ jobs:
               per_page: 100
             });
 
-            // Extract detailed information from diffs
             const analyzedFiles = files.map((f) => {
               const patch = f.patch || "";
               const lines = patch.split('\n');
-              
-              // Detect change types based on content
+
               let changeType = 'modified';
               if (f.status === 'added') changeType = 'added';
               else if (f.status === 'removed') changeType = 'deleted';
               else if (f.status === 'renamed') changeType = 'renamed';
-              
-              // Extract meaningful context from patch
+
               const addedLines = lines.filter(l => l.startsWith('+')).map(l => l.slice(1));
               const removedLines = lines.filter(l => l.startsWith('-')).map(l => l.slice(1));
-              
-              // Detect what was changed (function names, imports, config, etc.)
+
               const functionPattern = /^[\s]*(async\s+)?(function|const|let|class|export|interface|type)\s+([a-zA-Z_$][a-zA-Z0-9_$]*)/;
               const importPattern = /^[\s]*(import|require)\s+/;
               const configPattern = /\.(json|yaml|yml|toml|config|env|properties)$/i;
-              
+
               const addedFunctions = addedLines
                 .map(l => l.match(functionPattern)?.[3])
                 .filter(Boolean);
               const removedFunctions = removedLines
                 .map(l => l.match(functionPattern)?.[3])
                 .filter(Boolean);
-              const hasImportChanges = addedLines.some(l => l.match(importPattern)) || 
+              const hasImportChanges = addedLines.some(l => l.match(importPattern)) ||
                                        removedLines.some(l => l.match(importPattern));
               const isConfigFile = configPattern.test(f.filename);
-              
+
               return {
                 filename: f.filename,
                 status: f.status,
-                changeType: changeType,
+                changeType,
                 additions: f.additions,
                 deletions: f.deletions,
-                patch: patch.slice(0, 8000),
+                // Increased from 8000 to 20000 — the more diff AI sees, the more concrete it can be
+                patch: patch.slice(0, 20000),
                 summary: {
                   isConfigFile,
                   hasImportChanges,
-                  addedFunctions: addedFunctions.slice(0, 5),
-                  removedFunctions: removedFunctions.slice(0, 5),
+                  addedFunctions: addedFunctions.slice(0, 10),
+                  removedFunctions: removedFunctions.slice(0, 10),
                   linesAdded: addedLines.length,
                   linesRemoved: removedLines.length
                 }
@@ -84,8 +81,7 @@ jobs:
 
             const totalAdditions = analyzedFiles.reduce((sum, f) => sum + f.additions, 0);
             const totalDeletions = analyzedFiles.reduce((sum, f) => sum + f.deletions, 0);
-            
-            // Categorize files by type
+
             const categorized = {
               frontend: analyzedFiles.filter(f => /\.(tsx?|jsx?)$/i.test(f.filename) && !/test|spec/.test(f.filename)),
               styling: analyzedFiles.filter(f => /\.(css|scss|sass|less)$/i.test(f.filename)),
@@ -123,84 +119,101 @@ jobs:
             const categorized = JSON.parse(process.env.CATEGORIZED_JSON || "{}");
             const stats = JSON.parse(process.env.STATS_JSON || "{}");
 
-            // Enhanced fallback with detailed information
+            // ── Fallback: builds human-readable bullets directly from the patch ────────
             const generateDetailedFallback = () => {
               const sections = ["## Summary"];
-              
+
               sections.push(`This PR contains **${stats.fileCount} file changes** with **${stats.additions} additions** and **${stats.deletions} deletions**.`);
-              
+
               if (stats.frontendFiles > 0) sections.push(`- **Frontend**: ${stats.frontendFiles} file(s) modified`);
               if (stats.backendFiles > 0) sections.push(`- **Backend**: ${stats.backendFiles} file(s) modified`);
               if (stats.configFiles > 0) sections.push(`- **Configuration**: ${stats.configFiles} file(s) modified`);
               if (stats.styleFiles > 0) sections.push(`- **Styling**: ${stats.styleFiles} file(s) modified`);
               if (stats.testFiles > 0) sections.push(`- **Tests**: ${stats.testFiles} file(s) modified`);
-              
+
               sections.push("");
               sections.push("## What Changed");
-              
-              // Group changes by category
-              if (categorized.frontend?.length > 0) {
-                sections.push("### Frontend Components");
-                categorized.frontend.slice(0, 10).forEach(f => {
-                  let detail = `- **${f.filename}** (${f.status})`;
-                  if (f.summary.addedFunctions.length > 0) {
-                    detail += ` - Added: ${f.summary.addedFunctions.join(', ')}`;
+
+              // Helper: extract concrete diff facts from a patch string
+              const extractDiffFacts = (patch, filename) => {
+                if (!patch) return [];
+                const facts = [];
+                const lines = patch.split('\n');
+                const added = lines.filter(l => l.startsWith('+')).map(l => l.slice(1).trim()).filter(Boolean);
+                const removed = lines.filter(l => l.startsWith('-')).map(l => l.slice(1).trim()).filter(Boolean);
+
+                // CSS / style value changes  →  "color: red" became "color: blue"
+                const cssValuePair = /^([\w-]+)\s*:\s*(.+?);?$/;
+                removed.forEach(r => {
+                  const rm = r.match(cssValuePair);
+                  if (!rm) return;
+                  const [, prop, oldVal] = rm;
+                  const counterpart = added.find(a => {
+                    const am = a.match(cssValuePair);
+                    return am && am[1] === prop;
+                  });
+                  if (counterpart) {
+                    const [, , newVal] = counterpart.match(cssValuePair);
+                    if (oldVal.trim() !== newVal.trim()) {
+                      facts.push(`Changed \`${prop}\` from \`${oldVal.trim()}\` to \`${newVal.trim()}\``);
+                    }
                   }
-                  if (f.summary.hasImportChanges) {
-                    detail += ` - Dependencies updated`;
+                });
+
+                // String / text literal changes
+                const stringLiteralPattern = /["'`]([^"'`]{4,80})["'`]/;
+                removed.forEach(r => {
+                  const rm = r.match(stringLiteralPattern);
+                  if (!rm) return;
+                  const counterpart = added.find(a => {
+                    const am = a.match(stringLiteralPattern);
+                    return am && am[1] !== rm[1] && Math.abs(a.length - r.length) < 60;
+                  });
+                  if (counterpart) {
+                    const [, newText] = counterpart.match(stringLiteralPattern);
+                    facts.push(`Changed text from "${rm[1]}" to "${newText}"`);
                   }
-                  detail += ` (+${f.additions}/-${f.deletions})`;
-                  sections.push(detail);
                 });
-              }
-              
-              if (categorized.backend?.length > 0) {
-                sections.push("### Backend Logic");
-                categorized.backend.slice(0, 10).forEach(f => {
-                  let detail = `- **${f.filename}** (${f.status})`;
-                  if (f.summary.addedFunctions.length > 0) {
-                    detail += ` - Added: ${f.summary.addedFunctions.join(', ')}`;
+
+                // New functions / exports added
+                const fnPattern = /^(?:export\s+)?(?:async\s+)?(?:function|const|class)\s+([A-Z][a-zA-Z0-9]+)/;
+                added.forEach(l => {
+                  const m = l.match(fnPattern);
+                  if (m) facts.push(`Added \`${m[1]}\``);
+                });
+
+                // Removed functions
+                removed.forEach(l => {
+                  const m = l.match(fnPattern);
+                  if (m && !added.some(a => a.includes(m[1]))) {
+                    facts.push(`Removed \`${m[1]}\``);
                   }
-                  detail += ` (+${f.additions}/-${f.deletions})`;
-                  sections.push(detail);
                 });
-              }
-              
-              if (categorized.styling?.length > 0) {
-                sections.push("### Styling & UI");
-                categorized.styling.forEach(f => {
-                  sections.push(`- **${f.filename}** (+${f.additions}/-${f.deletions})`);
+
+                return facts.slice(0, 6); // cap to keep description tidy
+              };
+
+              const renderGroup = (label, files) => {
+                if (!files?.length) return;
+                sections.push(`### ${label}`);
+                files.slice(0, 10).forEach(f => {
+                  const facts = extractDiffFacts(f.patch, f.filename);
+                  let line = `- **${f.filename}** (${f.status}, +${f.additions}/-${f.deletions})`;
+                  if (facts.length > 0) {
+                    line += "\n" + facts.map(fact => `  - ${fact}`).join("\n");
+                  } else if (f.summary.addedFunctions.length > 0) {
+                    line += ` — added: ${f.summary.addedFunctions.join(', ')}`;
+                  }
+                  sections.push(line);
                 });
-              }
-              
-              if (categorized.config?.length > 0) {
-                sections.push("### Configuration");
-                categorized.config.forEach(f => {
-                  sections.push(`- **${f.filename}** - Configuration updated (+${f.additions}/-${f.deletions})`);
-                });
-              }
-              
-              if (categorized.tests?.length > 0) {
-                sections.push("### Tests");
-                categorized.tests.slice(0, 10).forEach(f => {
-                  sections.push(`- **${f.filename}** (+${f.additions}/-${f.deletions})`);
-                });
-              }
-              
-              sections.push("");
-              sections.push("## Technical Details");
-              sections.push("- Review the diff details for implementation specifics");
-              
-              if (categorized.frontend?.length > 0 && categorized.frontend.some(f => f.summary.hasImportChanges)) {
-                sections.push("- Component dependencies have been updated");
-              }
-              if (categorized.config?.length > 0) {
-                sections.push("- Configuration files modified - ensure environment is properly configured");
-              }
-              if (stats.testFiles > 0) {
-                sections.push(`- Tests updated (${stats.testFiles} file(s))`);
-              }
-              
+              };
+
+              renderGroup("Frontend Components", categorized.frontend);
+              renderGroup("Backend Logic", categorized.backend);
+              renderGroup("Styling & UI", categorized.styling);
+              renderGroup("Configuration", categorized.config);
+              renderGroup("Tests", categorized.tests);
+
               sections.push("");
               sections.push("## Testing");
               if (stats.testFiles > 0) {
@@ -210,62 +223,37 @@ jobs:
                 sections.push("- No automated tests were detected in this diff");
               }
               sections.push("- Manual validation recommended for all modified components");
-              
-              if (categorized.frontend?.length > 0) {
-                sections.push("- Test frontend components: render, interaction, and responsive design");
-              }
-              if (categorized.backend?.length > 0) {
-                sections.push("- Test backend logic: API endpoints, data processing, error handling");
-              }
-              
+              if (categorized.frontend?.length > 0) sections.push("- Test frontend components: render, interaction, and responsive design");
+              if (categorized.backend?.length > 0) sections.push("- Test backend logic: API endpoints, data processing, error handling");
+
               sections.push("");
               sections.push("## Risks and Review Notes");
-              
               const risks = [];
-              if (stats.deletions > stats.additions * 2) {
-                risks.push("- Large number of deletions - verify removed code is no longer needed");
-              }
-              if (categorized.config?.length > 0) {
-                risks.push("- Configuration changes may affect runtime behavior - review carefully");
-              }
-              if (categorized.backend?.length > stats.frontendFiles && stats.frontendFiles === 0) {
-                risks.push("- Backend changes without corresponding frontend updates - verify data contracts");
-              }
-              if (!stats.testFiles || stats.testFiles === 0) {
-                risks.push("- No tests included - additional manual testing required");
-              }
-              
-              if (risks.length === 0) {
-                risks.push("- No major risks identified - standard code review recommended");
-              }
-              
+              if (stats.deletions > stats.additions * 2) risks.push("- Large number of deletions — verify removed code is no longer needed");
+              if (categorized.config?.length > 0) risks.push("- Configuration changes may affect runtime behavior — review carefully");
+              if (categorized.backend?.length > 0 && stats.frontendFiles === 0) risks.push("- Backend changes without corresponding frontend updates — verify data contracts");
+              if (!stats.testFiles || stats.testFiles === 0) risks.push("- No tests included — additional manual testing required");
+              if (risks.length === 0) risks.push("- No major risks identified — standard code review recommended");
               sections.push(risks.join("\n"));
-              
+
               return sections.join("\n");
             };
 
             const generateDetailedChangelog = () => {
               const sections = ["# Changelog"];
-              
-              sections.push("");
-              sections.push("## Added");
-              const addedItems = changes
-                .filter(f => f.status === 'added')
-                .map(f => `- ${f.filename}`);
-              
+
+              sections.push(""); sections.push("## Added");
+              const addedItems = changes.filter(f => f.status === 'added').map(f => `- ${f.filename}`);
               const newFunctions = changes
                 .flatMap(f => f.summary.addedFunctions.map(fn => `- New function: \`${fn}\` in ${f.filename}`))
                 .slice(0, 5);
-              
               if (addedItems.length > 0 || newFunctions.length > 0) {
-                sections.push(...addedItems);
-                sections.push(...newFunctions);
+                sections.push(...addedItems, ...newFunctions);
               } else {
                 sections.push("- No new files or functions added");
               }
-              
-              sections.push("");
-              sections.push("## Changed");
+
+              sections.push(""); sections.push("## Changed");
               const changedItems = changes
                 .filter(f => f.status === 'modified')
                 .map(f => {
@@ -273,109 +261,119 @@ jobs:
                   if (f.summary.hasImportChanges) detail += " (dependencies updated)";
                   return detail;
                 });
-              
-              if (changedItems.length > 0) {
-                sections.push(...changedItems);
-              } else {
-                sections.push("- No files modified");
-              }
-              
-              sections.push("");
-              sections.push("## Fixed");
+              sections.push(...(changedItems.length > 0 ? changedItems : ["- No files modified"]));
+
+              sections.push(""); sections.push("## Fixed");
               sections.push("- See individual commit messages for bug fixes");
-              
-              sections.push("");
-              sections.push("## Technical");
+
+              sections.push(""); sections.push("## Technical");
               const technical = [];
-              if (categorized.config?.length > 0) {
-                technical.push(`- Configuration updated (${categorized.config.length} file(s))`);
-              }
-              if (changes.some(f => f.summary.hasImportChanges)) {
-                technical.push("- Dependencies or imports updated");
-              }
-              if (stats.testFiles > 0) {
-                technical.push(`- Test coverage updated (${stats.testFiles} file(s))`);
-              }
-              
-              if (technical.length > 0) {
-                sections.push(...technical);
-              } else {
-                sections.push("- No breaking technical changes");
-              }
-              
-              sections.push("");
-              sections.push("## Notes");
+              if (categorized.config?.length > 0) technical.push(`- Configuration updated (${categorized.config.length} file(s))`);
+              if (changes.some(f => f.summary.hasImportChanges)) technical.push("- Dependencies or imports updated");
+              if (stats.testFiles > 0) technical.push(`- Test coverage updated (${stats.testFiles} file(s))`);
+              sections.push(...(technical.length > 0 ? technical : ["- No breaking technical changes"]));
+
+              sections.push(""); sections.push("## Notes");
               sections.push(`- Total changes: ${stats.fileCount} files, +${stats.additions}/-${stats.deletions} lines`);
               if (stats.frontendFiles > 0) sections.push(`- Frontend impact: ${stats.frontendFiles} file(s)`);
               if (stats.backendFiles > 0) sections.push(`- Backend impact: ${stats.backendFiles} file(s)`);
-              
+
               return sections.join("\n");
             };
 
             let prDescription = generateDetailedFallback();
             let changelog = generateDetailedChangelog();
 
-            // Prepare enhanced prompt for AI analysis
+            // ── Build the AI prompt with the FULL patch content ───────────────────────
+            //
+            // Key change: we pass the raw patch lines to the model so it can reason
+            // about exact values (colors, labels, logic branches, etc.) rather than
+            // just file names and line counts.
+            //
+            const fileDetailsForAI = changes.map(f => {
+              // Send the full patch but cap total payload per file to avoid token overflow.
+              // Priority: include all added (+) and removed (-) lines; trim context lines (@@ …) if needed.
+              const patchLines = (f.patch || "").split('\n');
+              const importantLines = patchLines.filter(l => l.startsWith('+') || l.startsWith('-') || l.startsWith('@@'));
+              const contextLines = patchLines.filter(l => !l.startsWith('+') && !l.startsWith('-') && !l.startsWith('@@'));
+              // Build a trimmed patch: all important lines + first 5 context lines for orientation
+              const trimmedPatch = [
+                ...importantLines,
+                ...contextLines.slice(0, 5)
+              ].join('\n').slice(0, 12000);
+
+              return {
+                filename: f.filename,
+                status: f.status,
+                additions: f.additions,
+                deletions: f.deletions,
+                patch: trimmedPatch,
+                summary: f.summary
+              };
+            });
+
             const prompt = [
-              "You are an experienced senior software engineer and release manager analyzing a GitHub Pull Request.",
-              "Your job is to generate clear, detailed, human-readable documentation that helps reviewers understand the changes.",
+              "You are an experienced senior software engineer writing a Pull Request summary for a MIXED audience:",
+              "product managers, designers, QA testers, and developers.",
               "",
-              "IMPORTANT: Analyze the actual diff content, not just file metadata.",
-              "Focus on WHAT changed, WHY it matters, and HOW it affects the application.",
+              "## Your primary job",
+              "Read every line of every diff below and describe WHAT actually changed in plain language.",
+              "Be SPECIFIC and CONCRETE. Avoid vague phrases like 'updated component' or 'refactored logic'.",
               "",
-              "Return STRICT JSON ONLY with these keys:",
-              "- pr_description (markdown string)",
-              "- changelog (markdown string)",
+              "## Rules",
+              "✓ Describe the actual change: 'Changed the submit button color from #ccc to #3b82f6 (blue)'",
+              "✓ If a label or text string changed, say what it was and what it is now",
+              "✓ If a function was renamed, say old name → new name",
+              "✓ If a new API endpoint was added, name it",
+              "✓ If a config value changed (timeout, URL, flag), state old vs new value",
+              "✓ If a component was restructured, describe the visible/behavioral outcome",
+              "✓ Group bullets logically (UI changes / logic changes / config changes / fixes)",
+              "✗ Do NOT say 'files were modified' — explain what the modification does",
+              "✗ Do NOT repeat file names unless the name itself is meaningful context",
+              "✗ Do NOT invent changes — only describe what you see in the diffs",
+              "✗ Do NOT use jargon without explaining it",
               "",
-              "Rules:",
-              "✓ Extract meaningful information from diffs - identify functions, components, logic changes",
-              "✓ Explain the purpose and impact of changes",
-              "✓ Group related changes logically",
-              "✓ Be specific about what changed and why",
-              "✓ Mention file names and functions only when relevant",
-              "✓ Focus on developer experience and user impact",
-              "✓ Do NOT invent changes - only describe what you see in the diff",
-              "✓ For small diffs: be concise but meaningful",
-              "✓ For large diffs: organize into clear sections",
+              "## Output format",
+              "Return STRICT JSON ONLY — no markdown fences, no preamble:",
+              "{",
+              "  \"pr_description\": \"<markdown string>\",",
+              "  \"changelog\": \"<markdown string>\"",
+              "}",
               "",
+              "### pr_description structure",
+              "## Summary",
+              "2-4 sentences: what problem does this PR solve, or what feature does it add?",
+              "Write as if explaining to a non-technical colleague.",
+              "",
+              "## What Changed",
+              "Concrete bullet points, grouped by area (UI / Logic / Config / Tests).",
+              "Each bullet must describe the actual change, not just the file.",
+              "Examples of GOOD bullets:",
+              "- Changed the 'Cancel' button label to 'Go Back' on the checkout page",
+              "- The login form now shows an inline error message instead of an alert popup",
+              "- Increased the session timeout from 30 minutes to 60 minutes",
+              "- Added a new `/api/v2/users/export` endpoint that returns a CSV file",
+              "- Fixed a bug where clicking 'Save' twice would submit the form twice",
+              "",
+              "## Testing",
+              "What should reviewers test manually? Be specific about the user flows.",
+              "",
+              "## Risks and Review Notes",
+              "Flag anything a reviewer should pay extra attention to.",
+              "",
+              "### changelog structure",
+              "Standard Added / Changed / Fixed / Technical / Notes sections.",
+              "Same rule: concrete descriptions, not file names.",
+              "",
+              "─────────────────────────────────────",
               "PR Title: " + context.payload.pull_request.title,
               "PR Body: " + (context.payload.pull_request.body || "(no description provided)"),
               "",
               "Stats:",
               JSON.stringify(stats, null, 2),
               "",
-              "Changed files with details:",
-              JSON.stringify(changes.map(f => ({
-                filename: f.filename,
-                status: f.status,
-                additions: f.additions,
-                deletions: f.deletions,
-                summary: f.summary,
-                patchPreview: f.patch.split('\n').slice(0, 30).join('\n')
-              })), null, 2),
-              "",
-              "STRUCTURE FOR pr_description:",
-              "## Summary",
-              "2-4 sentences explaining the purpose, what problem it solves, and main area affected.",
-              "",
-              "## What Changed",
-              "Organized bullet points explaining changes by area (Frontend/Backend/Config/etc)",
-              "Each bullet explains WHAT and WHY it matters.",
-              "",
-              "## Technical Details",
-              "Implementation details relevant for code reviewers.",
-              "New components, functions, APIs, or configuration changes.",
-              "",
-              "## Testing",
-              "Describe testing approach based on changes.",
-              "If tests present, mention them. If not, suggest manual validation.",
-              "",
-              "## Risks and Review Notes",
-              "Potential risks, edge cases, or areas needing attention.",
-              "",
-              "STRUCTURE FOR changelog:",
-              "Use Added/Changed/Fixed/Technical/Notes sections.",
-              "Be specific about what was added, changed, or fixed."
+              "Full diff per file:",
+              JSON.stringify(fileDetailsForAI, null, 2)
             ].join("\n");
 
             try {
@@ -390,18 +388,22 @@ jobs:
                   messages: [
                     {
                       role: "system",
-                      content: "You are GitHub Copilot acting as an expert code reviewer and technical writer. Analyze PRs with attention to detail and generate clear, actionable documentation."
+                      content: [
+                        "You are a senior engineer and technical writer.",
+                        "You read git diffs carefully and translate them into plain-language descriptions.",
+                        "You always describe WHAT changed (values, labels, behavior), not WHERE (file names).",
+                        "You write for a mixed audience of developers, designers, and product managers.",
+                        "You return only valid JSON with keys pr_description and changelog."
+                      ].join(" ")
                     },
                     {
                       role: "user",
                       content: prompt
                     }
                   ],
-                  temperature: 0.3,
+                  temperature: 0.2,        // lower = more faithful to the actual diff
                   max_tokens: 2000,
-                  response_format: {
-                    type: "json_object"
-                  }
+                  response_format: { type: "json_object" }
                 })
               });
 
@@ -412,14 +414,12 @@ jobs:
 
               const data = await response.json();
               const content = data?.choices?.[0]?.message?.content;
-              
+
               if (content) {
                 const parsed = JSON.parse(content);
-                
                 if (parsed?.pr_description && parsed.pr_description.trim().length > 50) {
                   prDescription = parsed.pr_description;
                 }
-                
                 if (parsed?.changelog && parsed.changelog.trim().length > 50) {
                   changelog = parsed.changelog;
                 }
@@ -439,21 +439,21 @@ jobs:
         with:
           script: |
             const body = process.env.PR_DESCRIPTION;
-            
+
             await github.rest.pulls.update({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.issue.number,
               body: body
             });
-            
+
             core.info("✓ PR description updated with detailed analysis");
 
       - name: Write changelog file
         run: |
           cat > CHANGELOG_PR.md << 'EOF'
           # Changelog for PR #${{ github.event.pull_request.number }}
-          
+
           Generated automatically on: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
 
           ${{ steps.ai.outputs.changelog }}
@@ -475,7 +475,7 @@ jobs:
 
           git commit -m "chore: auto-generate changelog for PR #${{ github.event.pull_request.number }}"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
-          
+
           echo "✓ Changelog updated and pushed"
 
       - name: Comment on PR with status
@@ -485,14 +485,14 @@ jobs:
           script: |
             const summary = `
             ✨ **Automated Analysis Complete**
-            
+
             - **Files analyzed**: ${{ fromJson(steps.changes.outputs.stats).fileCount }}
             - **Lines changed**: +${{ fromJson(steps.changes.outputs.stats).additions }}/-${{ fromJson(steps.changes.outputs.stats).deletions }}
             - **Changelog**: Generated as CHANGELOG_PR.md
-            
+
             See the PR description above for detailed analysis.
             `;
-            
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
