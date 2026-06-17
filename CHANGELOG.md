@@ -1,5 +1,36 @@
 # Changelog
 
+<!-- PR-28-CHANGELOG-START -->
+## PR #28 - Search filters
+
+**Author:** @andreistancu21
+**Date:** 2026-06-17
+
+### Added
+- New `TeamFilters` component for searching and filtering team members by name, role, skill, department, and status.
+- Department and status filter pills with clear visual states.
+- "Clear filters" button to reset all filters.
+- Empty state messaging when no members match filters.
+- Join date display on MemberCard.
+
+### Changed
+- Team dashboard page now uses the `TeamFilters` component instead of static sorting and grid rendering.
+- MemberCard displays department-specific avatar gradients and color-coded badges for department and status.
+- Improved layout for member info, including join date and email.
+
+### Testing
+- Manual testing required for search and filter functionality, filter pill states, clear filters, empty state, and MemberCard display.
+- No automated tests were changed.
+
+### Review Notes
+- Review filtering logic for correctness and edge cases.
+- Check UI responsiveness and accessibility for filter controls and empty state.
+- Confirm MemberCard visual clarity and accessibility.
+- Ensure "Clear filters" resets all filter state.
+
+---
+<!-- PR-28-CHANGELOG-END -->
+
 <!-- PR-26-CHANGELOG-START -->
 ## PR #26 - add search/filter controls and richer member card badges
 
